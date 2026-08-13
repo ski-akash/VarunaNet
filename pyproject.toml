@@ -3,9 +3,12 @@ name = "varunanet"
 version = "0.1.0"
 description = "SAR-based flood detection and situational awareness system"
 requires-python = ">=3.10"
-# Real dependencies (numpy, torch, rasterio, etc.) get added phase by phase,
-# as the code that actually needs them gets written -- not all at once up front.
-dependencies = []
+# Real dependencies get added phase by phase, as the code that actually
+# needs them gets written -- not all at once up front. numpy is here first
+# because the data contract module operates on numpy arrays.
+dependencies = [
+    "numpy",
+]
 
 [project.optional-dependencies]
 # Tools for local development only; not needed to run the project itself.
@@ -26,6 +29,7 @@ packages = ["data", "models", "training", "benchmarks", "inference"]
 
 [tool.black]
 line-length = 100
+target-version = ["py310"]
 
 [tool.ruff]
 line-length = 100
