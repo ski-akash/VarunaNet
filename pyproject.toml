@@ -10,6 +10,8 @@ requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "rasterio",
+    "pysheds",
+    "affine",
 ]
 
 [project.optional-dependencies]
