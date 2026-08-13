@@ -12,6 +12,7 @@ dependencies = [
     "rasterio",
     "pysheds",
     "affine",
+    "matplotlib",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +21,9 @@ dev = [
     "ruff",
     "black",
     "pytest",
+    "jupyter",
+    "nbconvert",
+    "ipykernel",
 ]
 
 [build-system]
