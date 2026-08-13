@@ -9,3 +9,7 @@ __pycache__/
 .venv/
 venv/
 .ipynb_checkpoints/
+
+# Real downloaded datasets -- never belongs in git, fetched locally via
+# data/download_sen1floods11.py instead.
+datasets/
