@@ -5,9 +5,11 @@ description = "SAR-based flood detection and situational awareness system"
 requires-python = ">=3.10"
 # Real dependencies get added phase by phase, as the code that actually
 # needs them gets written -- not all at once up front. numpy is here first
-# because the data contract module operates on numpy arrays.
+# because the data contract module operates on numpy arrays; rasterio reads
+# the GeoTIFF chips the Sen1Floods11 dataset ships as.
 dependencies = [
     "numpy",
+    "rasterio",
 ]
 
 [project.optional-dependencies]
