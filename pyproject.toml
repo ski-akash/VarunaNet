@@ -1,0 +1,39 @@
+[project]
+name = "varunanet"
+version = "0.1.0"
+description = "SAR-based flood detection and situational awareness system"
+requires-python = ">=3.10"
+# Real dependencies (numpy, torch, rasterio, etc.) get added phase by phase,
+# as the code that actually needs them gets written -- not all at once up front.
+dependencies = []
+
+[project.optional-dependencies]
+# Tools for local development only; not needed to run the project itself.
+dev = [
+    "ruff",
+    "black",
+    "pytest",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Only these folders contain importable Python code. Without this list,
+# setuptools would also try to package non-Python folders like frontend/.
+packages = ["data", "models", "training", "benchmarks", "inference"]
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Default rule set plus import-sorting, so `ruff check` also catches
+# unsorted/unused imports instead of needing a separate isort run.
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
