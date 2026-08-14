@@ -14,6 +14,7 @@ from rasterio.transform import from_origin
 
 import benchmarks.evaluate as evaluate_module
 from benchmarks.evaluate import (
+    build_terrain_cache,
     compute_terrain_layers,
     evaluate_baseline,
     load_dem,
@@ -203,3 +204,44 @@ def test_otsu_hand_predict_falls_back_to_all_non_water_on_entirely_nan_vv():
 
     assert predicted.shape == (CHIP_SIZE, CHIP_SIZE)
     assert not predicted.any()
+
+
+def test_build_terrain_cache_returns_one_entry_per_chip(tmp_path):
+    _make_fixture(tmp_path, "Bolivia_1", vv_db=-20.0, vh_db=-25.0)
+    _make_fixture(tmp_path, "Ghana_1", vv_db=-8.0, vh_db=-12.0)
+
+    cache = build_terrain_cache(["Bolivia_1", "Ghana_1"], tmp_path / "DEMHand")
+
+    assert set(cache.keys()) == {"Bolivia_1", "Ghana_1"}
+    slope, hand = cache["Bolivia_1"]
+    assert slope.shape == (CHIP_SIZE, CHIP_SIZE)
+    assert hand.shape == (CHIP_SIZE, CHIP_SIZE)
+
+
+def test_evaluate_baseline_uses_terrain_cache_instead_of_dem_dir(tmp_path):
+    _make_fixture(tmp_path, "Bolivia_1", vv_db=-20.0, vh_db=-25.0)
+    split_csv = _write_split(tmp_path, ["Bolivia_1"])
+    dataset = Sen1Floods11Dataset(tmp_path / "S1Hand", tmp_path / "LabelHand", split_csv)
+    terrain_cache = build_terrain_cache(["Bolivia_1"], tmp_path / "DEMHand")
+
+    # dem_dir points nowhere; this only succeeds if the cache is actually used.
+    results = evaluate_baseline(
+        otsu_predict, dataset, tmp_path / "nonexistent_dem_dir", terrain_cache
+    )
+
+    assert len(results) == 1
+    assert results[0].chip_id == "Bolivia_1"
+
+
+def test_train_random_forest_baseline_uses_terrain_cache_instead_of_dem_dir(tmp_path):
+    _make_fixture(tmp_path, "Bolivia_1", vv_db=-20.0, vh_db=-25.0)
+    _make_fixture(tmp_path, "Ghana_1", vv_db=-8.0, vh_db=-12.0)
+    split_csv = _write_split(tmp_path, ["Bolivia_1", "Ghana_1"])
+    dataset = Sen1Floods11Dataset(tmp_path / "S1Hand", tmp_path / "LabelHand", split_csv)
+    terrain_cache = build_terrain_cache(["Bolivia_1", "Ghana_1"], tmp_path / "DEMHand")
+
+    model = train_random_forest_baseline(
+        dataset, tmp_path / "nonexistent_dem_dir", seed=0, terrain_cache=terrain_cache
+    )
+
+    assert hasattr(model, "predict")

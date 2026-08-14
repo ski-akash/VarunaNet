@@ -135,3 +135,16 @@ def test_dataset_remaps_nodata_label_to_ignore_index(tmp_path):
     assert sample.label[0, 0] == LABEL_WATER
     assert sample.label[1, 1] == LABEL_IGNORE  # was -1 in the source file
     assert sample.label[2, 2] == LABEL_NON_WATER
+
+
+def test_from_pairs_builds_a_dataset_without_a_split_file(tmp_path):
+    root = _make_fixture(tmp_path)
+
+    dataset = Sen1Floods11Dataset.from_pairs(
+        image_dir=root / "S1Hand",
+        label_dir=root / "LabelHand",
+        pairs=[("Bolivia_1_S1Hand.tif", "Bolivia_1_LabelHand.tif")],
+    )
+
+    assert len(dataset) == 1
+    assert dataset[0].chip_id == "Bolivia_1"

@@ -101,6 +101,26 @@ class Sen1Floods11Dataset:
         self.label_dir = Path(label_dir)
         self.pairs = read_split(split_csv)
 
+    @classmethod
+    def from_pairs(
+        cls, image_dir: str | Path, label_dir: str | Path, pairs: list[tuple[str, str]]
+    ) -> "Sen1Floods11Dataset":
+        """
+        Build a dataset from an explicit list of (image_filename,
+        label_filename) pairs instead of one official split file.
+
+        Needed for evaluation protocols that repartition chips by
+        something other than the official train/val/test assignment --
+        e.g. hold-one-event-out cross-validation (see
+        benchmarks/hold_one_event_out.py), which pools chips across all
+        three official splits and then regroups them by flood event.
+        """
+        dataset = cls.__new__(cls)
+        dataset.image_dir = Path(image_dir)
+        dataset.label_dir = Path(label_dir)
+        dataset.pairs = pairs
+        return dataset
+
     def __len__(self) -> int:
         return len(self.pairs)
 

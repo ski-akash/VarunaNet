@@ -12,6 +12,7 @@ evaluate_baseline()/train_random_forest_baseline() functions.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -114,8 +115,53 @@ def make_random_forest_predict(model: RandomForestClassifier) -> PredictFn:
     return predict
 
 
+# Keyed by chip id, so the same chip's slope/HAND can be computed once and
+# reused everywhere that chip shows up, instead of recomputing pysheds flow
+# routing from scratch each time. Plain evaluate_baseline() calls only ever
+# touch each chip once, so caching doesn't matter there -- it starts to
+# matter a lot for hold-one-event-out CV (see
+# benchmarks/hold_one_event_out.py), where most chips are part of the
+# training set in most of the 11 folds.
+TerrainCache = dict[str, tuple[np.ndarray, np.ndarray]]
+
+
+def _get_terrain(
+    chip_id: str, dem_dir: Path, terrain_cache: TerrainCache | None
+) -> tuple[np.ndarray, np.ndarray]:
+    if terrain_cache is not None and chip_id in terrain_cache:
+        return terrain_cache[chip_id]
+    dem = load_dem(dem_dir / f"{chip_id}_DEMHand.tif")
+    return compute_terrain_layers(dem)
+
+
+def build_terrain_cache(chip_ids: list[str], dem_dir: str | Path) -> TerrainCache:
+    """
+    Compute slope+HAND once per chip id and return them as a cache, ready
+    to hand to evaluate_baseline()/train_random_forest_baseline() so a
+    multi-fold evaluation (see benchmarks/hold_one_event_out.py) doesn't
+    recompute the same chip's terrain once per fold it appears in.
+
+    Flow-routing time varies a lot chip to chip -- a very flat DEM (e.g. a
+    river delta) can make pysheds' flat-resolution step run far longer than
+    a typical hilly chip, so this logs progress and per-chip timing rather
+    than running silently for however long the slowest chips take.
+    """
+    dem_dir = Path(dem_dir)
+    cache: TerrainCache = {}
+    for i, chip_id in enumerate(chip_ids, start=1):
+        start = time.monotonic()
+        dem = load_dem(dem_dir / f"{chip_id}_DEMHand.tif")
+        cache[chip_id] = compute_terrain_layers(dem)
+        elapsed = time.monotonic() - start
+        print(f"[terrain {i}/{len(chip_ids)}] {chip_id} ({elapsed:.1f}s)")
+    return cache
+
+
 def evaluate_baseline(
-    predict_fn: PredictFn, dataset: Sen1Floods11Dataset, dem_dir: str | Path
+    predict_fn: PredictFn,
+    dataset: Sen1Floods11Dataset,
+    dem_dir: str | Path,
+    terrain_cache: TerrainCache | None = None,
 ) -> list[ChipMetrics]:
     """
     Run one baseline's predict function over every chip in `dataset`,
@@ -127,8 +173,7 @@ def evaluate_baseline(
     results = []
     for i in range(len(dataset)):
         sample = dataset[i]
-        dem = load_dem(dem_dir / f"{sample.chip_id}_DEMHand.tif")
-        slope, hand = compute_terrain_layers(dem)
+        slope, hand = _get_terrain(sample.chip_id, dem_dir, terrain_cache)
 
         predicted = predict_fn(sample, slope, hand)
         results.append(compute_chip_metrics(sample.chip_id, predicted, sample.label))
@@ -136,7 +181,10 @@ def evaluate_baseline(
 
 
 def train_random_forest_baseline(
-    train_dataset: Sen1Floods11Dataset, dem_dir: str | Path, seed: int = 0
+    train_dataset: Sen1Floods11Dataset,
+    dem_dir: str | Path,
+    seed: int = 0,
+    terrain_cache: TerrainCache | None = None,
 ) -> RandomForestClassifier:
     """
     Train the Random Forest baseline on every chip in `train_dataset`,
@@ -149,8 +197,7 @@ def train_random_forest_baseline(
     all_labels = []
     for i in range(len(train_dataset)):
         sample = train_dataset[i]
-        dem = load_dem(dem_dir / f"{sample.chip_id}_DEMHand.tif")
-        slope, hand = compute_terrain_layers(dem)
+        slope, hand = _get_terrain(sample.chip_id, dem_dir, terrain_cache)
 
         features = build_pixel_features(sample.image, slope, hand)
         sampled_features, sampled_labels = sample_training_pixels(features, sample.label, rng)
