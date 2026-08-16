@@ -15,6 +15,14 @@ dependencies = [
     "matplotlib",
     "scikit-image",
     "scikit-learn",
+    # Phase 3 (primary CNN): torch/torchvision are the training backbone,
+    # and segmentation_models_pytorch supplies ready-made encoder/decoder
+    # architectures (U-Net, U-Net++, DeepLabV3+) with ImageNet-pretrained
+    # weights, so the project spends effort on the experimental design
+    # instead of re-deriving U-Net from scratch.
+    "torch",
+    "torchvision",
+    "segmentation-models-pytorch",
 ]
 
 [project.optional-dependencies]
