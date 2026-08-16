@@ -6,6 +6,12 @@ import {
   type MapGeoJSONFeature,
 } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import LayerToggles, { type LayerToggleState } from './LayerToggles'
+
+const DEFAULT_LAYER_TOGGLES: LayerToggleState = {
+  stateBorders: true,
+  districtBorders: true,
+}
 
 // India's real bounding box (southwest, northeast corners), computed
 // directly from the actual state polygon data below -- not eyeballed --
@@ -247,6 +253,7 @@ export default function MapView() {
   const mapRef = useRef<MapLibreMap | null>(null)
   const selectedRef = useRef<string | number | null>(null)
   const [selectedStateName, setSelectedStateName] = useState<string | null>(null)
+  const [layerToggles, setLayerToggles] = useState<LayerToggleState>(DEFAULT_LAYER_TOGGLES)
 
   useEffect(() => {
     if (containerRef.current === null || mapRef.current !== null) {
@@ -285,6 +292,32 @@ export default function MapView() {
     // deliberate, documented tradeoff, not an oversight.
   }, [])
 
+  function handleLayerTogglesChange(next: LayerToggleState) {
+    setLayerToggles(next)
+    const map = mapRef.current
+    if (map === null) {
+      return
+    }
+    // Guarded with getLayer: the toggle panel renders immediately, but
+    // the actual layers only exist once the map's 'load' event has fired
+    // and addIndiaLayers has run, so a toggle flipped in that (normally
+    // very short) window would otherwise hit a "layer not found" error.
+    if (map.getLayer('india-state-borders')) {
+      map.setLayoutProperty(
+        'india-state-borders',
+        'visibility',
+        next.stateBorders ? 'visible' : 'none',
+      )
+    }
+    if (map.getLayer('india-district-borders')) {
+      map.setLayoutProperty(
+        'india-district-borders',
+        'visibility',
+        next.districtBorders ? 'visible' : 'none',
+      )
+    }
+  }
+
   function handleBackToIndia() {
     const map = mapRef.current
     if (map === null) {
@@ -306,6 +339,7 @@ export default function MapView() {
           ← {selectedStateName}
         </button>
       )}
+      <LayerToggles value={layerToggles} onChange={handleLayerTogglesChange} />
     </div>
   )
 }
