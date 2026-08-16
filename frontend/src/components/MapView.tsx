@@ -1,5 +1,10 @@
-import { useEffect, useRef } from 'react'
-import { Map as MapLibreMap, NavigationControl, type StyleSpecification } from 'maplibre-gl'
+import { useEffect, useRef, useState } from 'react'
+import {
+  Map as MapLibreMap,
+  NavigationControl,
+  type StyleSpecification,
+  type MapGeoJSONFeature,
+} from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 // India's real bounding box (southwest, northeast corners), computed
@@ -66,9 +71,53 @@ const FLAT_STYLE: StyleSpecification = {
 // isn't real yet).
 const STATE_FILL_COLOR = '#2f6690'
 const STATE_HOVER_COLOR = '#1c4a6e'
+const STATE_SELECTED_OUTLINE_COLOR = '#f4a53a'
 const FADE_IN_MS = 900
+const ZOOM_ANIMATION_MS = 1200
 
-function addIndiaLayers(map: MapLibreMap): void {
+// A GeoJSON Polygon's coordinates are number[][][] (rings of points),
+// a MultiPolygon's are number[][][][] (polygons of rings of points) --
+// arbitrarily nested arrays that bottom out in a [lon, lat] pair.
+type NestedPosition = number[] | NestedPosition[]
+
+// Flattens a Polygon/MultiPolygon's coordinates into a [[minLon, minLat],
+// [maxLon, maxLat]] bounding box. Written locally instead of pulling in
+// @turf/bbox as a runtime dependency for one small computation -- the
+// heavier geometry work (union, masking) already happened once, offline,
+// when the source data was prepared; this is the one piece of geometry
+// math this project actually needs at runtime.
+function boundingBoxOf(geometry: MapGeoJSONFeature['geometry']): [[number, number], [number, number]] {
+  let minLon = Infinity
+  let minLat = Infinity
+  let maxLon = -Infinity
+  let maxLat = -Infinity
+
+  function visit(coords: NestedPosition): void {
+    if (typeof coords[0] === 'number') {
+      const [lon, lat] = coords as number[]
+      minLon = Math.min(minLon, lon)
+      maxLon = Math.max(maxLon, lon)
+      minLat = Math.min(minLat, lat)
+      maxLat = Math.max(maxLat, lat)
+      return
+    }
+    for (const item of coords as NestedPosition[]) {
+      visit(item)
+    }
+  }
+  visit('coordinates' in geometry ? geometry.coordinates : [])
+
+  return [
+    [minLon, minLat],
+    [maxLon, maxLat],
+  ]
+}
+
+function addIndiaLayers(
+  map: MapLibreMap,
+  selectedRef: { current: string | number | null },
+  onStateClick: (feature: MapGeoJSONFeature) => void,
+): void {
   // promoteId: each state's own name becomes its feature id, which is
   // what setFeatureState below needs to target one specific state rather
   // than the whole layer.
@@ -122,6 +171,20 @@ function addIndiaLayers(map: MapLibreMap): void {
     },
   })
 
+  // A distinct highlighted outline for whichever state is currently
+  // drilled into -- separate from the hover layer above, so "this is the
+  // state I'm looking at" reads differently from "this is what my cursor
+  // happens to be over".
+  map.addLayer({
+    id: 'india-state-selected-outline',
+    type: 'line',
+    source: 'india-states',
+    paint: {
+      'line-color': STATE_SELECTED_OUTLINE_COLOR,
+      'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 3, 0],
+    },
+  })
+
   // Fade the states in from transparent to fully opaque -- an animated
   // build-up rather than the shapes just appearing instantly.
   const start = performance.now()
@@ -158,11 +221,32 @@ function addIndiaLayers(map: MapLibreMap): void {
     }
     map.getCanvas().style.cursor = ''
   })
+
+  map.on('click', 'india-state-fill', (event) => {
+    if (!event.features || event.features.length === 0) {
+      return
+    }
+    const feature = event.features[0]
+    if (feature.id === undefined) {
+      return
+    }
+
+    if (selectedRef.current !== null) {
+      map.setFeatureState({ source: 'india-states', id: selectedRef.current }, { selected: false })
+    }
+    selectedRef.current = feature.id
+    map.setFeatureState({ source: 'india-states', id: feature.id }, { selected: true })
+
+    map.fitBounds(boundingBoxOf(feature.geometry), { padding: 48, duration: ZOOM_ANIMATION_MS })
+    onStateClick(feature)
+  })
 }
 
 export default function MapView() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
+  const selectedRef = useRef<string | number | null>(null)
+  const [selectedStateName, setSelectedStateName] = useState<string | null>(null)
 
   useEffect(() => {
     if (containerRef.current === null || mapRef.current !== null) {
@@ -180,7 +264,9 @@ export default function MapView() {
     })
     map.addControl(new NavigationControl(), 'top-right')
     map.on('load', () => {
-      addIndiaLayers(map)
+      addIndiaLayers(map, selectedRef, (feature) => {
+        setSelectedStateName(String(feature.properties?.name ?? ''))
+      })
       map.fitBounds(INDIA_BOUNDS, { padding: 24, duration: 2200 })
     })
     mapRef.current = map
@@ -199,5 +285,27 @@ export default function MapView() {
     // deliberate, documented tradeoff, not an oversight.
   }, [])
 
-  return <div ref={containerRef} className="map-view" data-testid="map-view" />
+  function handleBackToIndia() {
+    const map = mapRef.current
+    if (map === null) {
+      return
+    }
+    if (selectedRef.current !== null) {
+      map.setFeatureState({ source: 'india-states', id: selectedRef.current }, { selected: false })
+      selectedRef.current = null
+    }
+    setSelectedStateName(null)
+    map.fitBounds(INDIA_BOUNDS, { padding: 24, duration: ZOOM_ANIMATION_MS })
+  }
+
+  return (
+    <div className="map-view-wrapper">
+      <div ref={containerRef} className="map-view" data-testid="map-view" />
+      {selectedStateName !== null && (
+        <button type="button" className="back-to-india" onClick={handleBackToIndia}>
+          ← {selectedStateName}
+        </button>
+      )}
+    </div>
+  )
 }
