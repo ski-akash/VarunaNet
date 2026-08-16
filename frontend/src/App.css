@@ -1,0 +1,46 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+.app-header h1 {
+  font-size: 20px;
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.app-subtitle {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.app-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.map-view {
+  width: 100%;
+  max-width: 900px;
+  height: 100%;
+  max-height: 640px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}

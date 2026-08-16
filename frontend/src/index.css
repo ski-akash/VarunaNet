@@ -1,0 +1,46 @@
+/* Color tokens kept minimal on purpose -- expanded later once the
+   choropleth's colorblind-safe severity scale (spec section 7) is
+   designed, rather than guessed at now. */
+:root {
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #fff;
+  --border: #e5e4e7;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  font: 15px/145% var(--sans);
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #9ca3af;
+    --text-h: #f3f4f6;
+    --bg: #16171d;
+    --border: #2e303a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+h1 {
+  font-family: var(--sans);
+  font-weight: 500;
+  color: var(--text-h);
+}
