@@ -13,3 +13,6 @@ venv/
 # Real downloaded datasets -- never belongs in git, fetched locally via
 # data/download_sen1floods11.py instead.
 datasets/
+
+# Local tool config/permissions -- machine-specific, never belongs in git.
+.claude/

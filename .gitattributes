@@ -1,0 +1,6 @@
+# Normalize line endings to LF for everything git considers text.
+# This repo moved from a Windows dev machine to macOS (the final OS for the
+# project); without this, every checkout on a different OS/editor default
+# turns into a repo-wide false diff of line endings only, which is exactly
+# what happened here. text=auto lets git still leave genuine binaries alone.
+* text=auto eol=lf
