@@ -1,0 +1,37 @@
+# Top-level training config. Composed from the config groups below (model,
+# loss) plus the scalar fields here; merged against training/config.py's
+# TrainConfig dataclass at load time for type validation.
+#
+# Override anything from the command line without editing this file, e.g.:
+#   python -m training.train seed=1 optimizer.lr=3e-4
+#   python -m training.train loss=focal
+#   python -m training.train --multirun seed=1,2,3   # the spec's 3-seed runs
+defaults:
+  - model: unet_resnet34
+  - loss: dice_bce
+  - _self_
+
+seed: 0
+device: auto
+amp_dtype: fp32
+epochs: 1
+checkpoint_dir: checkpoints
+checkpoint_every_steps: 50
+resume_from: null
+
+dataset:
+  name: synthetic
+  num_samples: 8
+  height: 64
+  width: 64
+  batch_size: 2
+  shuffle: true
+
+optimizer:
+  lr: 1e-4
+  weight_decay: 1e-2
+  betas: [0.9, 0.999]
+
+scheduler:
+  warmup_steps: 0
+  min_lr_ratio: 0.0

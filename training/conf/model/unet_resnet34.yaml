@@ -1,0 +1,10 @@
+# The primary model (spec section 4.1): U-Net, ResNet-34 encoder,
+# ImageNet-pretrained. See models/unet.py. Kept as its own config-group
+# file (rather than inlined in config.yaml) so Phase 4's architecture
+# study can add sibling files here (e.g. a deeper encoder, or later a
+# DeepLabV3+/SegFormer config) and switch between them with
+# `model=<name>` on the command line, without touching this one.
+encoder_name: resnet34
+encoder_weights: imagenet
+in_channels: 5
+classes: 1

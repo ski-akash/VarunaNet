@@ -1,0 +1,6 @@
+# Dice + BCE combo loss (spec section 4.2), the training default. See
+# models/losses.py's DiceBCELoss. dice_weight/bce_weight aren't repeated
+# here since the TrainConfig dataclass already defaults both to 1.0 --
+# override on the command line if the loss ablation needs a different mix
+# (e.g. `loss.dice_weight=2.0`).
+name: dice_bce

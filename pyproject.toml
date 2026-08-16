@@ -23,6 +23,9 @@ dependencies = [
     "torch",
     "torchvision",
     "segmentation-models-pytorch",
+    # Config-driven training loop (spec section 8). omegaconf comes in as
+    # hydra-core's own dependency, not listed separately.
+    "hydra-core",
 ]
 
 [project.optional-dependencies]

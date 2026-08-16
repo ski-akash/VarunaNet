@@ -1,0 +1,6 @@
+# Focal loss (spec section 4.2's loss ablation): `python -m training.train
+# loss=focal`. See models/losses.py's build_focal_loss. gamma/alpha aren't
+# repeated here since TrainConfig's LossConfig already defaults them to
+# the values used there (2.0 / 0.25) -- override on the command line if
+# the ablation needs to sweep them.
+name: focal
