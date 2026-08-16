@@ -67,6 +67,22 @@ class DatasetConfig:
 
 
 @dataclass
+class WandbConfig:
+    project: str = "varunanet"
+    entity: Optional[str] = None
+    # "offline" by default -- spec section 8: "Weights & Biases logging
+    # (offline mode with later sync, since compute nodes are often
+    # air-gapped)". Local run data still gets written either way; offline
+    # just skips live network calls during training, synced afterward via
+    # `wandb sync`.
+    mode: str = "offline"
+    log_every_steps: int = 1
+    # None -> wandb's own default (./wandb/ under the current working
+    # directory). Overridden in tests to keep run files out of the repo.
+    dir: Optional[str] = None
+
+
+@dataclass
 class TrainConfig:
     seed: int = 0
     device: str = "auto"  # "auto" | "cpu" | "cuda"
@@ -84,3 +100,4 @@ class TrainConfig:
     optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
     dataset: DatasetConfig = field(default_factory=DatasetConfig)
+    wandb: WandbConfig = field(default_factory=WandbConfig)

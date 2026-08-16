@@ -16,3 +16,8 @@ datasets/
 
 # Local tool config/permissions -- machine-specific, never belongs in git.
 .claude/
+
+# W&B offline run data and training checkpoints -- local artifacts,
+# synced/uploaded separately, never committed.
+wandb/
+checkpoints/

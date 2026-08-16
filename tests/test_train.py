@@ -24,9 +24,12 @@ CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "training" / "conf")
 def _tiny_cfg(checkpoint_dir, **overrides):
     """
     A TrainConfig for fast, offline, CPU-only tests: no ImageNet download
-    (encoder_weights=None), a tiny model input size, and a tiny synthetic
-    dataset. `overrides` are dotted-path OmegaConf updates, e.g.
-    epochs=2 or **{"scheduler.warmup_steps": 1}.
+    (encoder_weights=None), a tiny model input size, a tiny synthetic
+    dataset, and W&B mode="disabled" (a complete no-op -- verified to
+    write zero files and skip all network I/O -- so tests don't litter
+    the repo with real run directories or attempt any network call).
+    `overrides` are dotted-path OmegaConf updates, e.g. epochs=2 or
+    **{"scheduler.warmup_steps": 1}.
     """
     cfg = OmegaConf.structured(TrainConfig)
     cfg.model.encoder_weights = None
@@ -38,6 +41,7 @@ def _tiny_cfg(checkpoint_dir, **overrides):
     cfg.dataset.batch_size = 2
     cfg.epochs = 1
     cfg.checkpoint_every_steps = 1
+    cfg.wandb.mode = "disabled"
     for key, value in overrides.items():
         OmegaConf.update(cfg, key, value)
     return cfg
@@ -213,3 +217,49 @@ def test_warmup_then_cosine_schedule_reaches_min_lr_ratio(tmp_path):
         optimizer.step()
         scheduler.step()
     assert abs(optimizer.param_groups[0]["lr"] - base_lr * min_lr_ratio) < 1e-9
+
+
+def test_wandb_disabled_mode_writes_no_files(tmp_path):
+    # Confirms the premise _tiny_cfg relies on everywhere else: mode=
+    # "disabled" is a true no-op (no local files, no network), which is
+    # why it's safe to use as the default for every other test in this
+    # file rather than only this one.
+    cfg = _tiny_cfg(tmp_path, epochs=1)
+    run_training(cfg)
+
+    assert not any(tmp_path.rglob("wandb"))
+
+
+def test_wandb_offline_mode_writes_local_run_files(tmp_path):
+    # The actual production default (spec section 8) -- confirms real
+    # local run files get written without any network access or API key,
+    # not just that mode="offline" is accepted as a string.
+    cfg = _tiny_cfg(tmp_path, epochs=1)
+    cfg.wandb.mode = "offline"
+    cfg.wandb.dir = str(tmp_path)
+
+    run_training(cfg)
+
+    offline_runs = list(tmp_path.glob("wandb/offline-run-*"))
+    assert len(offline_runs) == 1
+    assert any(f.suffix == ".wandb" for f in offline_runs[0].iterdir())
+
+
+def test_wandb_run_id_persisted_and_reused_on_resume(tmp_path):
+    cfg_part1 = _tiny_cfg(tmp_path, epochs=2, checkpoint_every_steps=2)
+    cfg_part1.wandb.mode = "offline"
+    cfg_part1.wandb.dir = str(tmp_path)
+    run_training(cfg_part1, max_steps=2)
+
+    checkpoint = torch.load(tmp_path / "step_2.pt", weights_only=False)
+    original_run_id = checkpoint["wandb_run_id"]
+    assert original_run_id is not None
+
+    cfg_part2 = _tiny_cfg(tmp_path, epochs=2, checkpoint_every_steps=2)
+    cfg_part2.wandb.mode = "offline"
+    cfg_part2.wandb.dir = str(tmp_path)
+    cfg_part2.resume_from = str(tmp_path / "step_2.pt")
+    run_training(cfg_part2)
+
+    resumed_checkpoint = torch.load(tmp_path / "step_4.pt", weights_only=False)
+    assert resumed_checkpoint["wandb_run_id"] == original_run_id

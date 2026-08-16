@@ -35,3 +35,10 @@ optimizer:
 scheduler:
   warmup_steps: 0
   min_lr_ratio: 0.0
+
+wandb:
+  project: varunanet
+  entity: null
+  mode: offline
+  log_every_steps: 1
+  dir: null

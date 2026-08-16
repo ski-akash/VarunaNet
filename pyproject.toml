@@ -26,6 +26,9 @@ dependencies = [
     # Config-driven training loop (spec section 8). omegaconf comes in as
     # hydra-core's own dependency, not listed separately.
     "hydra-core",
+    # Experiment tracking, offline mode by default -- SLURM compute nodes
+    # are often air-gapped (spec section 8).
+    "wandb",
 ]
 
 [project.optional-dependencies]

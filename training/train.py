@@ -19,6 +19,7 @@ from pathlib import Path
 
 import hydra
 import torch
+import wandb
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
 
@@ -178,9 +179,33 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
     optimizer, scheduler = build_optimizer_and_scheduler(cfg, model, total_steps)
 
     global_step = 0
+    wandb_run_id = None
     if cfg.resume_from is not None:
         meta = _load_checkpoint(cfg.resume_from, model, optimizer, scheduler, map_location=device)
         global_step = meta["global_step"]
+        wandb_run_id = meta["wandb_run_id"]
+
+    # id + resume="allow" lets a resumed run log into the same logical
+    # W&B run as the one that got interrupted, rather than starting a
+    # disconnected new one, whenever wandb_run_id was recovered from a
+    # checkpoint above. Note (verified directly, not assumed from docs):
+    # under mode="offline" this does NOT append to the original run's
+    # local files -- W&B prints "resume will be ignored... starting a new
+    # run with run id X" and writes a second local run directory, but it
+    # does keep the same run id. That's expected offline-mode behavior,
+    # not a bug here: syncing both local directories later (`wandb sync`)
+    # reconciles them into one run on the dashboard because they share an
+    # id, which is the whole reason wandb_run_id is threaded through the
+    # checkpoint at all.
+    wandb_run = wandb.init(
+        project=cfg.wandb.project,
+        entity=cfg.wandb.entity,
+        mode=cfg.wandb.mode,
+        dir=cfg.wandb.dir,
+        config=OmegaConf.to_container(cfg, resolve=True) if isinstance(cfg, DictConfig) else None,
+        id=wandb_run_id,
+        resume="allow" if wandb_run_id is not None else None,
+    )
 
     # AMP only actually activates on CUDA -- see models section 4.2's note
     # that bf16/fp16 are a GPU concern (A100 vs V100). On CPU, running
@@ -218,11 +243,27 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
         global_step += 1
         last_loss = loss.item()
 
+        if global_step % cfg.wandb.log_every_steps == 0:
+            wandb.log(
+                {"train/loss": last_loss, "train/lr": scheduler.get_last_lr()[0]},
+                step=global_step,
+            )
+
         if global_step % cfg.checkpoint_every_steps == 0 or global_step == total_steps:
             epoch = global_step // steps_per_epoch
             checkpoint_path = Path(cfg.checkpoint_dir) / f"step_{global_step}.pt"
-            save_checkpoint(checkpoint_path, model, optimizer, scheduler, global_step, epoch, cfg)
+            save_checkpoint(
+                checkpoint_path,
+                model,
+                optimizer,
+                scheduler,
+                global_step,
+                epoch,
+                cfg,
+                wandb_run_id=wandb_run.id,
+            )
 
+    wandb.finish()
     return {"global_step": global_step, "final_loss": last_loss, "model": model}
 
 

@@ -92,6 +92,7 @@ def save_checkpoint(
     global_step: int,
     epoch: int,
     cfg,
+    wandb_run_id: str | None = None,
 ) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,6 +109,10 @@ def save_checkpoint(
             "config": config_dict,
             "git_commit_sha": get_git_commit_sha(),
             "rng_state": _capture_rng_state(),
+            # Lets a resumed run log into the same logical W&B run instead
+            # of starting a disconnected one -- see training/train.py's
+            # run_training for how this gets passed back to wandb.init.
+            "wandb_run_id": wandb_run_id,
         },
         path,
     )
@@ -148,4 +153,5 @@ def load_checkpoint(
         "epoch": checkpoint["epoch"],
         "config": checkpoint["config"],
         "git_commit_sha": checkpoint["git_commit_sha"],
+        "wandb_run_id": checkpoint.get("wandb_run_id"),
     }
