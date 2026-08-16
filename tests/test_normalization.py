@@ -36,6 +36,26 @@ def test_compute_stats_rejects_empty_list():
         compute_normalization_stats([])
 
 
+def test_compute_stats_ignores_nan_instead_of_propagating_it():
+    # Regression test for a real bug found wiring up the real dataset:
+    # np.mean/np.std propagate a single NaN into a NaN result for the
+    # entire channel, but real chips carry NaN by design (every chip's
+    # HAND channel has NaN border pixels -- see data/hand.py), so plain
+    # mean/std would have silently produced NaN stats the first time this
+    # ran against real data.
+    clean = make_tensor(0.0)
+    with_nan = make_tensor(0.0).copy()
+    with_nan[0, 0, 0] = np.nan  # one NaN pixel in channel 0
+
+    stats = compute_normalization_stats([clean, with_nan])
+
+    assert np.isfinite(stats.mean).all()
+    assert np.isfinite(stats.std).all()
+    # With only one NaN pixel out of many, channel 0's mean should still
+    # land essentially at its expected value (0.0), not be corrupted.
+    assert abs(stats.mean[0] - 0.0) < 1e-3
+
+
 def test_save_and_load_round_trip(tmp_path):
     stats = compute_normalization_stats([make_tensor(0.0), make_tensor(2.0)])
     path = tmp_path / "norm_stats.json"

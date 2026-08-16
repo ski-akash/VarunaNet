@@ -12,12 +12,10 @@ evaluate_baseline()/train_random_forest_baseline() functions.
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
-import rasterio
 from sklearn.ensemble import RandomForestClassifier
 
 from benchmarks.metrics import (
@@ -35,35 +33,32 @@ from benchmarks.random_forest import (
     sample_training_pixels,
     train_random_forest,
 )
-from data.hand import compute_hand
+from data.chip_terrain import (
+    CHIP_PIXEL_SIZE_M,
+    HAND_ACCUMULATION_THRESHOLD,
+    TerrainCache,
+    build_terrain_cache,
+    compute_terrain_layers,
+    get_terrain,
+    load_dem,
+)
 from data.sen1floods11 import Sen1Floods11Dataset, Sen1Floods11Sample
-from data.terrain import compute_slope
 
-# Sen1Floods11 chips are stored in EPSG:4326 (lat/lon degrees), not a
-# projected metric CRS, so there's no exact "meters per pixel" to read
-# from the file. 10m is the native ground sampling distance of the
-# underlying Sentinel-1 product; treating it as isotropic here is an
-# approximation (true east-west ground distance shrinks slightly with
-# latitude) -- the same not-a-tuned-constant spirit as the accumulation
-# threshold below.
-CHIP_PIXEL_SIZE_M = 10.0
-
-# The same default already validated against real chips for the Random
-# Forest baseline -- genuinely terrain-dependent, not a universal constant.
-HAND_ACCUMULATION_THRESHOLD = 100
-
-
-def load_dem(dem_path: str | Path) -> np.ndarray:
-    """Read a single-band *_DEMHand.tif chip, already co-registered to its S1 chip's grid."""
-    with rasterio.open(dem_path) as src:
-        return src.read(1).astype(np.float32)
-
-
-def compute_terrain_layers(dem: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Derive slope and HAND from a chip's DEM, on the chip's own pixel grid."""
-    slope = compute_slope(dem, CHIP_PIXEL_SIZE_M)
-    hand = compute_hand(dem, CHIP_PIXEL_SIZE_M, accumulation_threshold=HAND_ACCUMULATION_THRESHOLD)
-    return slope, hand
+# Re-exported from data.chip_terrain (see that module, shared with
+# training/sen1floods11_dataset.py) so this file's own imports above stay
+# the public names existing callers/tests already use. Note for anyone
+# patching HAND_ACCUMULATION_THRESHOLD in a test: patch it on
+# data.chip_terrain, not on this module -- compute_terrain_layers is
+# *defined* there, so it reads the module-global at call time from that
+# module's own namespace, not from whatever name this import rebinds here.
+__all__ = [
+    "CHIP_PIXEL_SIZE_M",
+    "HAND_ACCUMULATION_THRESHOLD",
+    "TerrainCache",
+    "build_terrain_cache",
+    "compute_terrain_layers",
+    "load_dem",
+]
 
 
 # Every baseline is scored through the same evaluate_baseline() loop below,
@@ -115,48 +110,6 @@ def make_random_forest_predict(model: RandomForestClassifier) -> PredictFn:
     return predict
 
 
-# Keyed by chip id, so the same chip's slope/HAND can be computed once and
-# reused everywhere that chip shows up, instead of recomputing pysheds flow
-# routing from scratch each time. Plain evaluate_baseline() calls only ever
-# touch each chip once, so caching doesn't matter there -- it starts to
-# matter a lot for hold-one-event-out CV (see
-# benchmarks/hold_one_event_out.py), where most chips are part of the
-# training set in most of the 11 folds.
-TerrainCache = dict[str, tuple[np.ndarray, np.ndarray]]
-
-
-def _get_terrain(
-    chip_id: str, dem_dir: Path, terrain_cache: TerrainCache | None
-) -> tuple[np.ndarray, np.ndarray]:
-    if terrain_cache is not None and chip_id in terrain_cache:
-        return terrain_cache[chip_id]
-    dem = load_dem(dem_dir / f"{chip_id}_DEMHand.tif")
-    return compute_terrain_layers(dem)
-
-
-def build_terrain_cache(chip_ids: list[str], dem_dir: str | Path) -> TerrainCache:
-    """
-    Compute slope+HAND once per chip id and return them as a cache, ready
-    to hand to evaluate_baseline()/train_random_forest_baseline() so a
-    multi-fold evaluation (see benchmarks/hold_one_event_out.py) doesn't
-    recompute the same chip's terrain once per fold it appears in.
-
-    Flow-routing time varies a lot chip to chip -- a very flat DEM (e.g. a
-    river delta) can make pysheds' flat-resolution step run far longer than
-    a typical hilly chip, so this logs progress and per-chip timing rather
-    than running silently for however long the slowest chips take.
-    """
-    dem_dir = Path(dem_dir)
-    cache: TerrainCache = {}
-    for i, chip_id in enumerate(chip_ids, start=1):
-        start = time.monotonic()
-        dem = load_dem(dem_dir / f"{chip_id}_DEMHand.tif")
-        cache[chip_id] = compute_terrain_layers(dem)
-        elapsed = time.monotonic() - start
-        print(f"[terrain {i}/{len(chip_ids)}] {chip_id} ({elapsed:.1f}s)")
-    return cache
-
-
 def evaluate_baseline(
     predict_fn: PredictFn,
     dataset: Sen1Floods11Dataset,
@@ -173,7 +126,7 @@ def evaluate_baseline(
     results = []
     for i in range(len(dataset)):
         sample = dataset[i]
-        slope, hand = _get_terrain(sample.chip_id, dem_dir, terrain_cache)
+        slope, hand = get_terrain(sample.chip_id, dem_dir, terrain_cache)
 
         predicted = predict_fn(sample, slope, hand)
         results.append(compute_chip_metrics(sample.chip_id, predicted, sample.label))
@@ -197,7 +150,7 @@ def train_random_forest_baseline(
     all_labels = []
     for i in range(len(train_dataset)):
         sample = train_dataset[i]
-        slope, hand = _get_terrain(sample.chip_id, dem_dir, terrain_cache)
+        slope, hand = get_terrain(sample.chip_id, dem_dir, terrain_cache)
 
         features = build_pixel_features(sample.image, slope, hand)
         sampled_features, sampled_labels = sample_training_pixels(features, sample.label, rng)

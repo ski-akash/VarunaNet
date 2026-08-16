@@ -50,6 +50,18 @@ def compute_normalization_stats(tensors: list[np.ndarray]) -> NormalizationStats
     Only ever call this on the training split - computing stats on
     validation or test data would leak information about those splits into
     the model.
+
+    NaN-aware (np.nanmean/np.nanstd) rather than plain mean/std: real
+    chips carry NaN pixels by design, not just as a rare edge case --
+    data/hand.py's HAND computation leaves the outer border of every chip
+    as NaN (a documented, unavoidable flow-routing edge effect), so every
+    single training chip contributes at least some NaN pixels to the HAND
+    channel. Plain np.mean/np.std propagate a single NaN into a NaN result
+    for the *entire* channel (confirmed directly: np.array([1., 2.,
+    np.nan]).mean() is nan, not "mean of the finite values"), which would
+    have silently produced NaN normalization stats -- and therefore NaN
+    everywhere after every future apply_normalization() call -- the very
+    first time this was run against the real dataset.
     """
     if not tensors:
         raise ValueError("cannot compute normalization stats from an empty list")
@@ -61,8 +73,8 @@ def compute_normalization_stats(tensors: list[np.ndarray]) -> NormalizationStats
         raise ValueError(f"expected {NUM_CHANNELS} channels, got {stacked.shape[1]}")
 
     per_channel = stacked.transpose(1, 0, 2, 3).reshape(NUM_CHANNELS, -1)
-    mean = per_channel.mean(axis=1)
-    std = per_channel.std(axis=1)
+    mean = np.nanmean(per_channel, axis=1)
+    std = np.nanstd(per_channel, axis=1)
 
     return NormalizationStats(
         channels=CHANNELS,

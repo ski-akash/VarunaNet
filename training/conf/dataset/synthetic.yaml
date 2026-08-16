@@ -1,0 +1,11 @@
+# Tiny fixed, seeded synthetic tensors -- no real chips, no network, no
+# GPU needed. This is the default so the whole training path (config,
+# model, loss, checkpoint/resume, W&B) can be exercised and tested
+# locally before ever touching real data (spec section 8). See
+# training/train.py's SyntheticFloodDataset.
+name: synthetic
+batch_size: 2
+shuffle: true
+num_samples: 8
+height: 64
+width: 64

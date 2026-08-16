@@ -12,7 +12,7 @@ import pytest
 import rasterio
 from rasterio.transform import from_origin
 
-import benchmarks.evaluate as evaluate_module
+import data.chip_terrain as chip_terrain_module
 from benchmarks.generate_results import (
     _best_baseline,
     _describe_extreme_event,
@@ -32,8 +32,10 @@ _SYNTHETIC_ACCUMULATION_THRESHOLD = 15  # see tests/test_evaluate.py for why
 
 @pytest.fixture(autouse=True)
 def _use_synthetic_accumulation_threshold(monkeypatch):
+    # Patched on data.chip_terrain -- see tests/test_evaluate.py's version
+    # of this fixture for why it can't be patched on benchmarks.evaluate.
     monkeypatch.setattr(
-        evaluate_module, "HAND_ACCUMULATION_THRESHOLD", _SYNTHETIC_ACCUMULATION_THRESHOLD
+        chip_terrain_module, "HAND_ACCUMULATION_THRESHOLD", _SYNTHETIC_ACCUMULATION_THRESHOLD
     )
 
 

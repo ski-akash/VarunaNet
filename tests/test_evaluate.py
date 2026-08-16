@@ -12,7 +12,7 @@ import pytest
 import rasterio
 from rasterio.transform import from_origin
 
-import benchmarks.evaluate as evaluate_module
+import data.chip_terrain as chip_terrain_module
 from benchmarks.evaluate import (
     build_terrain_cache,
     compute_terrain_layers,
@@ -32,14 +32,18 @@ _TRANSFORM = from_origin(0, 0, 1, 1)
 # 512x512 chips; a 9x9 synthetic valley never accumulates that much flow,
 # so every pixel would come back NaN. tests/test_hand.py established 15 as
 # the right threshold for this exact synthetic valley shape, so tests here
-# patch the module constant down to that instead of changing the real one.
+# patch the constant down to that instead of changing the real one.
 _SYNTHETIC_ACCUMULATION_THRESHOLD = 15
 
 
 @pytest.fixture(autouse=True)
 def _use_synthetic_accumulation_threshold(monkeypatch):
+    # Patched on data.chip_terrain, not benchmarks.evaluate: that's where
+    # compute_terrain_layers is actually defined, so that's the module
+    # namespace it reads HAND_ACCUMULATION_THRESHOLD from at call time --
+    # patching the name benchmarks.evaluate re-exports wouldn't affect it.
     monkeypatch.setattr(
-        evaluate_module, "HAND_ACCUMULATION_THRESHOLD", _SYNTHETIC_ACCUMULATION_THRESHOLD
+        chip_terrain_module, "HAND_ACCUMULATION_THRESHOLD", _SYNTHETIC_ACCUMULATION_THRESHOLD
     )
 
 

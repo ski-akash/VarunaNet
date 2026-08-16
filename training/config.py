@@ -56,14 +56,25 @@ class SchedulerConfig:
 
 @dataclass
 class DatasetConfig:
-    # "synthetic" is the only dataset wired up so far -- real Sen1Floods11
-    # dataset wiring is a follow-up task (see VarunaNet_Spec.md).
+    # "synthetic" | "sen1floods11" -- see training/train.py's build_dataloader.
     name: str = "synthetic"
+    batch_size: int = 2
+    shuffle: bool = True
+
+    # Only used when name == "synthetic".
     num_samples: int = 8
     height: int = 64
     width: int = 64
-    batch_size: int = 2
-    shuffle: bool = True
+
+    # Only used when name == "sen1floods11". data_root matches the
+    # on-disk layout VarunaNet_Spec.md's Environment notes describe:
+    # <data_root>/{S1Hand,LabelHand,DEMHand,splits}/. normalization_stats_path
+    # is the artifact data/compute_normalization_stats.py produces --
+    # computed once on the training split and persisted, never
+    # recomputed per-run (spec section 3.3).
+    data_root: str = "datasets/sen1floods11"
+    split_csv_name: str = "flood_train_data.csv"
+    normalization_stats_path: str = "data/sen1floods11_normalization_stats.json"
 
 
 @dataclass

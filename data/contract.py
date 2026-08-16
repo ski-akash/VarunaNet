@@ -33,13 +33,24 @@ LABEL_IGNORE = 255  # no-data pixels: excluded from the loss, not treated as "no
 def validate_input_tensor(tensor: np.ndarray) -> None:
     """
     Raise ValueError if `tensor` doesn't match the input contract:
-    shape [NUM_CHANNELS, CHIP_SIZE, CHIP_SIZE], dtype float32.
+    shape [NUM_CHANNELS, CHIP_SIZE, CHIP_SIZE], dtype float32, no NaN.
+
+    The no-NaN check matters because NaN is expected upstream (real chips
+    carry it -- e.g. HAND's flow-routing leaves every chip's border as
+    NaN by design, see data/hand.py) but must never reach this point: a
+    NaN anywhere in a convolution's receptive field poisons that whole
+    output region, and that propagates layer by layer until the model's
+    entire forward pass is NaN. Anything producing a final input tensor
+    (e.g. training/sen1floods11_dataset.py) is responsible for replacing
+    NaN with a defined value before this check, not after.
     """
     expected_shape = (NUM_CHANNELS, CHIP_SIZE, CHIP_SIZE)
     if tensor.shape != expected_shape:
         raise ValueError(f"input tensor has shape {tensor.shape}, expected {expected_shape}")
     if tensor.dtype != np.float32:
         raise ValueError(f"input tensor has dtype {tensor.dtype}, expected float32")
+    if np.isnan(tensor).any():
+        raise ValueError("input tensor contains NaN values -- must be resolved before this point")
 
 
 def validate_label_tensor(tensor: np.ndarray) -> None:

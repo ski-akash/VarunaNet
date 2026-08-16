@@ -78,7 +78,7 @@ def test_command_line_style_overrides_apply():
 
 def test_unknown_dataset_name_raises_not_implemented(tmp_path):
     cfg = _tiny_cfg(tmp_path)
-    cfg.dataset.name = "sen1floods11"
+    cfg.dataset.name = "not_a_real_dataset"
 
     try:
         build_dataloader(cfg)

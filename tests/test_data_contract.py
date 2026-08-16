@@ -46,6 +46,17 @@ def test_input_tensor_wrong_dtype_rejected():
         validate_input_tensor(bad)
 
 
+def test_input_tensor_with_nan_rejected():
+    # Real chips carry NaN by design (e.g. HAND's border pixels -- see
+    # data/hand.py), so it must be resolved to a real value before a
+    # tensor reaches this point, not after -- this is the check that
+    # catches it if that step is ever skipped.
+    bad = make_valid_input()
+    bad[0, 0, 0] = np.nan
+    with pytest.raises(ValueError, match="NaN"):
+        validate_input_tensor(bad)
+
+
 def test_valid_label_tensor_passes():
     validate_label_tensor(make_valid_label())
 

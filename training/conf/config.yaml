@@ -5,10 +5,12 @@
 # Override anything from the command line without editing this file, e.g.:
 #   python -m training.train seed=1 optimizer.lr=3e-4
 #   python -m training.train loss=focal
+#   python -m training.train dataset=sen1floods11    # real data instead of synthetic
 #   python -m training.train --multirun seed=1,2,3   # the spec's 3-seed runs
 defaults:
   - model: unet_resnet34
   - loss: dice_bce
+  - dataset: synthetic
   - _self_
 
 seed: 0
@@ -18,14 +20,6 @@ epochs: 1
 checkpoint_dir: checkpoints
 checkpoint_every_steps: 50
 resume_from: null
-
-dataset:
-  name: synthetic
-  num_samples: 8
-  height: 64
-  width: 64
-  batch_size: 2
-  shuffle: true
 
 optimizer:
   lr: 1e-4

@@ -94,16 +94,30 @@ class SyntheticFloodDataset(Dataset):
 
 
 def build_dataloader(cfg) -> DataLoader:
-    if cfg.dataset.name != "synthetic":
-        raise NotImplementedError(
-            f"dataset {cfg.dataset.name!r} isn't wired up yet -- only 'synthetic' is "
-            "supported so far. Real Sen1Floods11 dataset wiring is a follow-up task."
+    if cfg.dataset.name == "synthetic":
+        dataset = SyntheticFloodDataset(
+            num_samples=cfg.dataset.num_samples,
+            height=cfg.dataset.height,
+            width=cfg.dataset.width,
         )
-    dataset = SyntheticFloodDataset(
-        num_samples=cfg.dataset.num_samples,
-        height=cfg.dataset.height,
-        width=cfg.dataset.width,
-    )
+    elif cfg.dataset.name == "sen1floods11":
+        # Local imports: keeps torch's synthetic-only test path from
+        # needing rasterio/pysheds (real chip I/O and terrain
+        # computation) just to import this module at all.
+        from data.normalization import NormalizationStats
+        from training.sen1floods11_dataset import build_sen1floods11_dataset
+
+        stats = NormalizationStats.load(cfg.dataset.normalization_stats_path)
+        dataset = build_sen1floods11_dataset(
+            data_root=cfg.dataset.data_root,
+            split_csv_name=cfg.dataset.split_csv_name,
+            normalization_stats=stats,
+        )
+    else:
+        raise NotImplementedError(
+            f"dataset {cfg.dataset.name!r} isn't wired up yet -- 'synthetic' and "
+            "'sen1floods11' are the only options implemented so far."
+        )
     return DataLoader(dataset, batch_size=cfg.dataset.batch_size, shuffle=cfg.dataset.shuffle)
 
 
