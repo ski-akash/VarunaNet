@@ -1,0 +1,98 @@
+# Training image (spec section 9): heavy, CUDA-capable, never meant to be
+# the serving image -- see the (separate, slim, no-torch) Dockerfile.serve
+# for that. This is the Docker-based alternative to
+# training/environment.yml, for clusters that support Docker/Apptainer
+# image builds rather than a plain conda env (spec section 8).
+#
+# Pinned to the exact package versions this project's training path
+# (models/, training/) was built and tested against locally -- keep this
+# in sync with training/environment.yml's pins; they intentionally
+# duplicate each other (see that file's comment for why) rather than
+# sharing one file.
+#
+# Base image: plain python:3.12-slim rather than an nvidia/cuda base.
+# Modern PyTorch (2.13.0 here) ships its own CUDA 13.0.3 runtime
+# libraries as ordinary pip dependencies on Linux (nvidia-cublas-cu13,
+# nvidia-cudnn-cu13, etc. -- confirmed against this exact release's
+# published PyPI metadata, not assumed), so no system CUDA toolkit needs
+# to be baked into the image. The actual GPU driver lives on the
+# host/cluster node and gets passed through at container-run time
+# (`docker run --gpus all ...` / Apptainer's `--nv`).
+#
+# GPU target: A100 (Ampere, confirmed -- spec section 13). If the
+# cluster's NVIDIA driver turns out to be older than what CUDA 13 needs,
+# check with `nvidia-smi` on a login/compute node (this project can't
+# verify that from here) and pin an older torch/torchvision build instead
+# rather than assuming this image works unmodified.
+
+FROM python:3.12-slim
+
+# rasterio/pysheds pull in GDAL; their manylinux wheels bundle it
+# statically, but libexpat1/libgomp1 are still needed at runtime for some
+# of their native extensions. git is needed so get_git_commit_sha()
+# (training/checkpoint.py) can log which commit produced a given
+# checkpoint -- spec section 8: "log git commit SHA ... with every run".
+#
+# Package versions deliberately not pinned here (unlike every Python
+# dependency below): python:3.12-slim already pins a specific Debian
+# release, which is what actually determines what these three resolve to
+# -- hard-pinning individual apt package versions on top of that is
+# fragile against upstream mirrors dropping older package versions
+# entirely, for a reproducibility gain that the base image tag already
+# covers for a handful of small, stable system libraries like these.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libexpat1 \
+    libgomp1 \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user -- spec section 9: "Non-root users, no secrets baked into
+# layers". Numeric UID in the USER directive (rather than the username)
+# so it still resolves correctly even if a future change turns this into
+# a multi-stage build whose final stage doesn't carry over /etc/passwd.
+RUN useradd --create-home --uid 1000 trainer
+USER 1000
+WORKDIR /home/trainer/varunanet
+ENV PATH="/home/trainer/.local/bin:${PATH}"
+
+# Dependencies pinned explicitly here rather than via `pip install .`
+# against pyproject.toml -- pyproject.toml's torch/torchvision/etc.
+# entries are deliberately unpinned for everyday local development
+# (spec's data/README-style convention of adding real deps as needed,
+# not pinning up front), which would let a rebuild silently drift to
+# whatever's newest at build time. This list is the actual source of
+# truth for the training environment; pyproject.toml is not.
+RUN pip install --no-cache-dir --user \
+    torch==2.13.0 \
+    torchvision==0.28.0 \
+    segmentation_models_pytorch==0.5.0 \
+    hydra-core==1.3.5 \
+    omegaconf==2.3.1 \
+    wandb==0.28.2 \
+    numpy==2.5.2 \
+    rasterio==1.5.1 \
+    pysheds==0.5 \
+    affine==3.0.0 \
+    matplotlib==3.11.1 \
+    scikit-image==0.26.0 \
+    scikit-learn==1.9.0
+
+# Only the training path's own code -- not benchmarks/, inference/,
+# frontend/, etc. -- so a change elsewhere in the repo doesn't invalidate
+# this image's build cache, and the image doesn't carry code it never runs.
+COPY --chown=trainer:trainer pyproject.toml ./
+COPY --chown=trainer:trainer data/ ./data/
+COPY --chown=trainer:trainer models/ ./models/
+COPY --chown=trainer:trainer training/ ./training/
+
+# --no-deps: dependencies are already pinned and installed above; this
+# only registers data/models/training as an importable package rather
+# than re-resolving (and potentially upgrading) anything.
+RUN pip install --no-cache-dir --user --no-deps .
+
+# Offline by default inside the image -- spec section 8: compute nodes
+# are often air-gapped. Override at `docker run` / `sbatch` time with
+# `-e WANDB_MODE=online` on a node that actually has network access.
+ENV WANDB_MODE=offline
+
+ENTRYPOINT ["python", "-m", "training.train"]

@@ -155,3 +155,36 @@ def load_checkpoint(
         "git_commit_sha": checkpoint["git_commit_sha"],
         "wandb_run_id": checkpoint.get("wandb_run_id"),
     }
+
+
+def find_latest_checkpoint(checkpoint_dir) -> Path | None:
+    """
+    Returns the highest-step checkpoint in checkpoint_dir (save_checkpoint
+    names them step_<N>.pt), or None if the directory doesn't exist or has
+    none yet.
+
+    This is what makes "resume automatically" (spec section 8) actually
+    automatic rather than something a human has to notice and wire up by
+    hand: training/train.py's main() calls this before every run, so a
+    SLURM job that gets killed and requeued (--requeue) just re-runs the
+    exact same submitted command from scratch, and the training code
+    itself finds and resumes from its own last checkpoint -- no special
+    logic needed in the sbatch script, and no risk of a shell one-liner
+    picking the wrong file via lexical instead of numeric sort (e.g.
+    "step_10.pt" sorting before "step_2.pt").
+    """
+    checkpoint_dir = Path(checkpoint_dir)
+    if not checkpoint_dir.is_dir():
+        return None
+
+    checkpoints = []
+    for path in checkpoint_dir.glob("step_*.pt"):
+        try:
+            step = int(path.stem.removeprefix("step_"))
+        except ValueError:
+            continue
+        checkpoints.append((step, path))
+
+    if not checkpoints:
+        return None
+    return max(checkpoints, key=lambda item: item[0])[1]

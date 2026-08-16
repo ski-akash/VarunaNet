@@ -26,8 +26,8 @@ from torch.utils.data import DataLoader, Dataset
 from data.contract import LABEL_IGNORE, LABEL_NON_WATER, LABEL_WATER, NUM_CHANNELS
 from models.losses import build_loss
 from models.unet import build_unet
+from training.checkpoint import find_latest_checkpoint, save_checkpoint, seed_everything
 from training.checkpoint import load_checkpoint as _load_checkpoint
-from training.checkpoint import save_checkpoint, seed_everything
 from training.config import TrainConfig
 
 
@@ -267,11 +267,36 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
     return {"global_step": global_step, "final_loss": last_loss, "model": model}
 
 
+def _maybe_resume_from_latest(cfg) -> None:
+    """
+    "Resume automatically" (spec section 8): if the config didn't already
+    say where to resume from, check whether this run's own checkpoint_dir
+    already has one and use it. This is what a requeued SLURM job
+    (--requeue, see training/submit_train.sbatch) relies on -- it re-runs
+    the exact same submitted command from scratch, and this is the only
+    place that needs to notice a checkpoint already exists; nothing
+    special is needed in the sbatch script itself.
+
+    Kept separate from run_training() itself so that function always just
+    does exactly what cfg.resume_from says -- tests that call it directly
+    stay predictable and aren't surprised by filesystem state -- and
+    separate from main() so this auto-detection step is testable without
+    going through Hydra's CLI-parsing decorator.
+    """
+    if cfg.resume_from is not None:
+        return
+    latest = find_latest_checkpoint(cfg.checkpoint_dir)
+    if latest is not None:
+        print(f"found existing checkpoint, resuming from: {latest}")
+        cfg.resume_from = str(latest)
+
+
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(raw_cfg: DictConfig) -> None:
     # Merge the YAML-composed config against TrainConfig for type
     # validation -- see training/config.py's module docstring for why.
     cfg = OmegaConf.merge(OmegaConf.structured(TrainConfig), raw_cfg)
+    _maybe_resume_from_latest(cfg)
     result = run_training(cfg)
     print(f"training finished: step={result['global_step']} final_loss={result['final_loss']:.4f}")
 

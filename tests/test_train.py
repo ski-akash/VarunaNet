@@ -15,8 +15,9 @@ import torch
 from hydra import compose, initialize
 from omegaconf import OmegaConf
 
+from training.checkpoint import find_latest_checkpoint
 from training.config import TrainConfig
-from training.train import build_dataloader, run_training
+from training.train import _maybe_resume_from_latest, build_dataloader, run_training
 
 CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "training" / "conf")
 
@@ -263,3 +264,70 @@ def test_wandb_run_id_persisted_and_reused_on_resume(tmp_path):
 
     resumed_checkpoint = torch.load(tmp_path / "step_4.pt", weights_only=False)
     assert resumed_checkpoint["wandb_run_id"] == original_run_id
+
+
+def test_find_latest_checkpoint_returns_none_when_missing(tmp_path):
+    assert find_latest_checkpoint(tmp_path / "does-not-exist") is None
+    assert find_latest_checkpoint(tmp_path) is None  # exists but empty
+
+
+def test_find_latest_checkpoint_picks_highest_step_not_lexical_last(tmp_path):
+    # step_10.pt sorts before step_2.pt lexically -- this is exactly the
+    # bug a shell `ls | sort` one-liner would be prone to (see
+    # find_latest_checkpoint's docstring), so the test specifically
+    # includes a case where lexical and numeric order disagree.
+    for step in [2, 10, 6]:
+        (tmp_path / f"step_{step}.pt").touch()
+
+    assert find_latest_checkpoint(tmp_path) == tmp_path / "step_10.pt"
+
+
+def test_find_latest_checkpoint_ignores_unrelated_files(tmp_path):
+    (tmp_path / "step_3.pt").touch()
+    (tmp_path / "not_a_checkpoint.txt").touch()
+    (tmp_path / "step_extra.pt").touch()  # non-numeric suffix, must be skipped
+
+    assert find_latest_checkpoint(tmp_path) == tmp_path / "step_3.pt"
+
+
+def test_maybe_resume_from_latest_finds_existing_checkpoint(tmp_path):
+    cfg_part1 = _tiny_cfg(tmp_path, epochs=2, checkpoint_every_steps=2)
+    run_training(cfg_part1, max_steps=2)
+
+    cfg_part2 = _tiny_cfg(tmp_path, epochs=2, checkpoint_every_steps=2)
+    assert cfg_part2.resume_from is None
+    _maybe_resume_from_latest(cfg_part2)
+
+    assert cfg_part2.resume_from == str(tmp_path / "step_2.pt")
+
+
+def test_maybe_resume_from_latest_leaves_explicit_resume_from_alone(tmp_path):
+    cfg = _tiny_cfg(tmp_path, resume_from="/some/explicit/path.pt")
+    _maybe_resume_from_latest(cfg)
+
+    assert cfg.resume_from == "/some/explicit/path.pt"
+
+
+def test_maybe_resume_from_latest_is_a_noop_with_no_checkpoints(tmp_path):
+    cfg = _tiny_cfg(tmp_path)
+    _maybe_resume_from_latest(cfg)
+
+    assert cfg.resume_from is None
+
+
+def test_requeue_simulation_resumes_automatically_without_explicit_resume_from(tmp_path):
+    # End-to-end simulation of what training/submit_train.sbatch relies
+    # on: SLURM's --requeue re-runs the exact same command with no new
+    # arguments after a preemption. This mirrors that: two separate
+    # run_training invocations, neither one ever setting resume_from
+    # explicitly -- only _maybe_resume_from_latest (as main() calls it)
+    # bridges them.
+    cfg_1 = _tiny_cfg(tmp_path, epochs=2, checkpoint_every_steps=2)
+    _maybe_resume_from_latest(cfg_1)  # no-op, nothing checkpointed yet
+    run_training(cfg_1, max_steps=2)  # simulates getting preempted after step 2
+
+    cfg_2 = _tiny_cfg(tmp_path, epochs=2, checkpoint_every_steps=2)
+    _maybe_resume_from_latest(cfg_2)  # should find step_2.pt on its own
+    result = run_training(cfg_2)
+
+    assert result["global_step"] == 4
