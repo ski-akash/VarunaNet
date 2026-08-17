@@ -1,4 +1,5 @@
 export interface LayerToggleState {
+  countryBorders: boolean
   stateBorders: boolean
   districtBorders: boolean
 }
@@ -30,6 +31,14 @@ export default function LayerToggles({ value, onChange }: LayerTogglesProps) {
   return (
     <div className="layer-toggles">
       <span className="layer-toggles-heading">Layers</span>
+      <label className="layer-toggle">
+        <input
+          type="checkbox"
+          checked={value.countryBorders}
+          onChange={(event) => onChange({ ...value, countryBorders: event.target.checked })}
+        />
+        Country boundaries
+      </label>
       <label className="layer-toggle">
         <input
           type="checkbox"

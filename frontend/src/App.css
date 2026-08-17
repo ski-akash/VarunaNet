@@ -414,33 +414,66 @@
   color: var(--text);
 }
 
-.flood-report-badge {
+.flood-source-info {
+  /* MapLibre's own zoom-in/zoom-out/compass stack (top-right) is 3
+     buttons x 29px plus a 10px top margin, so it occupies roughly the
+     top 97px of that corner -- this sits clear below it, and clear of
+     the back-button/current-location pair in the top-left (.map-nav). */
   position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 115px;
+  right: 12px;
   z-index: 1;
-  max-width: min(90%, 480px);
+}
+
+.flood-source-info-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid #e2636b;
+  background: var(--bg);
+  color: #e2636b;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 14px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.flood-source-info-button:hover {
+  background: #e2636b;
+  color: var(--bg);
+}
+
+.flood-source-popover {
+  position: absolute;
+  top: 32px;
+  right: 0;
+  width: max(260px, min(90vw, 340px));
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 10px 12px;
   border-radius: 6px;
-  border: 1px solid #e31a1c;
+  border: 1px solid #e2636b;
   background: var(--bg);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   font-family: var(--sans);
   font-size: 11px;
   line-height: 1.4;
   color: var(--text-h);
-  text-align: center;
 }
 
-.flood-report-badge a {
-  color: #7f0000;
+.flood-source-popover a {
+  color: #b23a41;
 }
 
-.flood-report-badge-note {
+.flood-source-popover-meta {
+  color: var(--text);
+}
+
+.flood-source-popover-note {
   color: var(--text);
   font-size: 10.5px;
 }
