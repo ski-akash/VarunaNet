@@ -81,6 +81,12 @@ const FLAT_STYLE: StyleSpecification = {
 const STATE_FILL_COLOR = '#2f6690'
 const STATE_HOVER_COLOR = '#1c4a6e'
 const STATE_SELECTED_OUTLINE_COLOR = '#f4a53a'
+// A distinct accent (violet, not the state's amber) for district
+// selection, so "you're looking at this district" reads as a different
+// drill-down level from "you're looking at this state", not a
+// same-meaning highlight one level down.
+const DISTRICT_HOVER_FILL_COLOR = '#8b5cf6'
+const DISTRICT_SELECTED_OUTLINE_COLOR = '#6d28d9'
 const FADE_IN_MS = 900
 const ZOOM_ANIMATION_MS = 1200
 
@@ -125,7 +131,9 @@ function boundingBoxOf(geometry: MapGeoJSONFeature['geometry']): [[number, numbe
 function addIndiaLayers(
   map: MapLibreMap,
   selectedRef: { current: string | number | null },
+  selectedDistrictRef: { current: string | number | null },
   onStateClick: (feature: MapGeoJSONFeature) => void,
+  onDistrictClick: (feature: MapGeoJSONFeature) => void,
 ): void {
   // promoteId: each state's own name becomes its feature id, which is
   // what setFeatureState below needs to target one specific state rather
@@ -151,7 +159,20 @@ function addIndiaLayers(
     },
   })
 
-  map.addSource('india-districts', { type: 'geojson', data: DISTRICTS_GEOJSON_URL })
+  // promoteId here is 'id', not 'name' -- district names are NOT
+  // guaranteed unique across India (confirmed directly against the real
+  // data: 10 duplicate names, including plain "East"/"North"/"South"/
+  // "West", likely from Sikkim or a similar state). Using 'name' as the
+  // feature-state key would mean setFeatureState on one "East" district
+  // silently also affects every other district sharing that name --
+  // 'id' is a synthetic per-feature index added specifically to avoid
+  // this, since the source shapefile's own numeric census code wasn't
+  // carried into the already-simplified/trimmed file this project ships.
+  map.addSource('india-districts', {
+    type: 'geojson',
+    data: DISTRICTS_GEOJSON_URL,
+    promoteId: 'id',
+  })
 
   // Real, sourced, current news reports (see lib/currentFloodReports.ts)
   // -- deliberately NOT the severity-gradient palette (severityColor.ts):
@@ -195,6 +216,33 @@ function addIndiaLayers(
       'line-color': '#eef3f8',
       'line-width': 0.6,
       'line-opacity': 0.6,
+    },
+  })
+
+  // Hit-test layer for district hover/click -- fully transparent except
+  // when hovered. Clicking is gated on a state already being selected
+  // (see the click handler below): without that guard, clicking anywhere
+  // in the full-India view would fire both this layer's click handler and
+  // the state-fill layer's at the same point simultaneously (MapLibre
+  // dispatches per-layer click handlers independently, not by
+  // topmost-layer-wins), racing two conflicting fitBounds calls.
+  map.addLayer({
+    id: 'india-district-fill',
+    type: 'fill',
+    source: 'india-districts',
+    paint: {
+      'fill-color': DISTRICT_HOVER_FILL_COLOR,
+      'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.3, 0],
+    },
+  })
+
+  map.addLayer({
+    id: 'india-district-selected-outline',
+    type: 'line',
+    source: 'india-districts',
+    paint: {
+      'line-color': DISTRICT_SELECTED_OUTLINE_COLOR,
+      'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 2.5, 0],
     },
   })
 
@@ -275,8 +323,80 @@ function addIndiaLayers(
     selectedRef.current = feature.id
     map.setFeatureState({ source: 'india-states', id: feature.id }, { selected: true })
 
+    // A newly clicked state clears any district selection left over from
+    // a previously drilled-into state -- otherwise a stale district
+    // highlight (and stale "back to <district's state>" label) would
+    // persist across an unrelated state selection.
+    if (selectedDistrictRef.current !== null) {
+      map.setFeatureState(
+        { source: 'india-districts', id: selectedDistrictRef.current },
+        { selected: false },
+      )
+      selectedDistrictRef.current = null
+    }
+
     map.fitBounds(boundingBoxOf(feature.geometry), { padding: 48, duration: ZOOM_ANIMATION_MS })
     onStateClick(feature)
+  })
+
+  let hoveredDistrictId: string | number | null = null
+  map.on('mousemove', 'india-district-fill', (event) => {
+    if (!event.features || event.features.length === 0) {
+      return
+    }
+    const featureId = event.features[0].id
+    if (featureId === undefined || featureId === hoveredDistrictId) {
+      return
+    }
+    if (hoveredDistrictId !== null) {
+      map.setFeatureState({ source: 'india-districts', id: hoveredDistrictId }, { hover: false })
+    }
+    hoveredDistrictId = featureId
+    map.setFeatureState({ source: 'india-districts', id: featureId }, { hover: true })
+    // Only shows the pointer cursor once a state is selected -- matches
+    // the click guard below, so the cursor doesn't promise an
+    // interaction that clicking wouldn't actually perform yet.
+    if (selectedRef.current !== null) {
+      map.getCanvas().style.cursor = 'pointer'
+    }
+  })
+  map.on('mouseleave', 'india-district-fill', () => {
+    if (hoveredDistrictId !== null) {
+      map.setFeatureState({ source: 'india-districts', id: hoveredDistrictId }, { hover: false })
+      hoveredDistrictId = null
+    }
+    map.getCanvas().style.cursor = ''
+  })
+
+  map.on('click', 'india-district-fill', (event) => {
+    // Drill-down only works one level at a time: India -> state -> its
+    // districts. A state must already be selected.
+    if (selectedRef.current === null) {
+      return
+    }
+    if (!event.features || event.features.length === 0) {
+      return
+    }
+    const feature = event.features[0]
+    if (feature.id === undefined) {
+      return
+    }
+
+    if (selectedDistrictRef.current !== null) {
+      map.setFeatureState(
+        { source: 'india-districts', id: selectedDistrictRef.current },
+        { selected: false },
+      )
+    }
+    selectedDistrictRef.current = feature.id
+    map.setFeatureState({ source: 'india-districts', id: feature.id }, { selected: true })
+
+    // Deliberately no fitBounds/zoom here, unlike the state click handler
+    // above -- selecting a district highlights it (violet outline) and
+    // updates the location label, but stays at whatever zoom level the
+    // user was already looking at the state with, rather than jumping
+    // the camera in further.
+    onDistrictClick(feature)
   })
 }
 
@@ -291,7 +411,13 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const selectedRef = useRef<string | number | null>(null)
+  const selectedDistrictRef = useRef<string | number | null>(null)
+  // Retained so "back" from a selected district can return to exactly
+  // the selected state's own framing, instead of re-deriving it or
+  // falling back to the whole-India view and losing one drill-down level.
+  const selectedStateBoundsRef = useRef<[[number, number], [number, number]] | null>(null)
   const [selectedStateName, setSelectedStateName] = useState<string | null>(null)
+  const [selectedDistrictName, setSelectedDistrictName] = useState<string | null>(null)
   const [layerToggles, setLayerToggles] = useState<LayerToggleState>(DEFAULT_LAYER_TOGGLES)
 
   useEffect(() => {
@@ -314,9 +440,19 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
     })
     map.addControl(new NavigationControl(), 'top-right')
     map.on('load', () => {
-      addIndiaLayers(map, selectedRef, (feature) => {
-        setSelectedStateName(String(feature.properties?.name ?? ''))
-      })
+      addIndiaLayers(
+        map,
+        selectedRef,
+        selectedDistrictRef,
+        (feature) => {
+          selectedStateBoundsRef.current = boundingBoxOf(feature.geometry)
+          setSelectedStateName(String(feature.properties?.name ?? ''))
+          setSelectedDistrictName(null)
+        },
+        (feature) => {
+          setSelectedDistrictName(String(feature.properties?.name ?? ''))
+        },
+      )
       map.fitBounds(INDIA_BOUNDS, { padding: 24, duration: 2200 })
     })
     mapRef.current = map
@@ -361,11 +497,27 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
     }
   }
 
-  function handleBackToIndia() {
+  // One level of "back" at a time: a selected district returns to its
+  // state's own framing; a selected state (no district) returns to India.
+  function handleBack() {
     const map = mapRef.current
     if (map === null) {
       return
     }
+
+    if (selectedDistrictRef.current !== null) {
+      map.setFeatureState(
+        { source: 'india-districts', id: selectedDistrictRef.current },
+        { selected: false },
+      )
+      selectedDistrictRef.current = null
+      setSelectedDistrictName(null)
+      if (selectedStateBoundsRef.current !== null) {
+        map.fitBounds(selectedStateBoundsRef.current, { padding: 48, duration: ZOOM_ANIMATION_MS })
+      }
+      return
+    }
+
     if (selectedRef.current !== null) {
       map.setFeatureState({ source: 'india-states', id: selectedRef.current }, { selected: false })
       selectedRef.current = null
@@ -374,13 +526,30 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
     map.fitBounds(INDIA_BOUNDS, { padding: 24, duration: ZOOM_ANIMATION_MS })
   }
 
+  const backButtonLabel =
+    selectedDistrictName !== null ? selectedStateName : selectedStateName !== null ? 'India' : null
+
+  // "Where am I" -- separate from the back button, which names the
+  // *target* of going back, not the current selection. Without this, the
+  // district's name only ever showed up as an unlabeled violet outline
+  // on the map itself.
+  const currentLocationLabel =
+    selectedDistrictName !== null
+      ? `${selectedDistrictName}, ${selectedStateName}`
+      : selectedStateName
+
   return (
     <div className="map-view-wrapper">
       <div ref={containerRef} className="map-view" data-testid="map-view" />
-      {selectedStateName !== null && (
-        <button type="button" className="back-to-india" onClick={handleBackToIndia}>
-          ← {selectedStateName}
-        </button>
+      {backButtonLabel !== null && (
+        <div className="map-nav">
+          <button type="button" className="back-to-india" onClick={handleBack}>
+            ← {backButtonLabel}
+          </button>
+          {currentLocationLabel !== null && (
+            <span className="current-location">{currentLocationLabel}</span>
+          )}
+        </div>
       )}
       <LayerToggles value={layerToggles} onChange={handleLayerTogglesChange} />
       <SeverityLegend />
