@@ -74,6 +74,10 @@ class DatasetConfig:
     # recomputed per-run (spec section 3.3).
     data_root: str = "datasets/sen1floods11"
     split_csv_name: str = "flood_train_data.csv"
+    # Used for validation regardless of dataset name (see
+    # training/train.py's build_val_dataloader) -- the official
+    # Sen1Floods11 validation split, never touched for training itself.
+    val_split_csv_name: str = "flood_valid_data.csv"
     normalization_stats_path: str = "data/sen1floods11_normalization_stats.json"
 
 
@@ -105,6 +109,12 @@ class TrainConfig:
     checkpoint_dir: str = "checkpoints"
     checkpoint_every_steps: int = 50
     resume_from: Optional[str] = None
+    # Spec section 4.2: "early stopping on val IoU". Validation runs every
+    # validate_every_epochs epochs; training stops early if
+    # early_stopping_patience validation checks in a row show no
+    # improvement in mean val IoU.
+    validate_every_epochs: int = 1
+    early_stopping_patience: int = 5
 
     model: ModelConfig = field(default_factory=ModelConfig)
     loss: LossConfig = field(default_factory=LossConfig)

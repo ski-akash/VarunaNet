@@ -136,7 +136,7 @@ def test_getitem_returns_contract_conformant_tensors(fixture_root):
         normalization_stats=_FLAT_STATS,
     )
 
-    inputs, label = dataset[0]
+    inputs, label, _ = dataset[0]
 
     assert inputs.shape == (5, CHIP_SIZE, CHIP_SIZE)
     assert inputs.dtype.is_floating_point
@@ -157,7 +157,7 @@ def test_getitem_replaces_nan_instead_of_propagating_it(fixture_root):
         normalization_stats=_FLAT_STATS,
     )
 
-    inputs, _ = dataset[0]
+    inputs, _, _ = dataset[0]
 
     assert not torch.isnan(inputs).any()
 
@@ -181,7 +181,7 @@ def test_terrain_cache_is_used_instead_of_recomputing(fixture_root):
         terrain_cache=terrain_cache,
     )
 
-    inputs, _ = dataset[0]  # Bolivia_1 is index 0 in the split
+    inputs, _, _ = dataset[0]  # Bolivia_1 is index 0 in the split
     # channel 3 = slope, channel 4 = HAND (data/contract.py's CHANNELS order)
     assert inputs[3, 0, 0].item() == 999.0
     assert inputs[4, 0, 0].item() == 888.0
@@ -205,7 +205,7 @@ def test_normalization_is_actually_applied(fixture_root):
         normalization_stats=stats,
     )
 
-    inputs, _ = dataset[0]
+    inputs, _, _ = dataset[0]
     # (-12.0 - (-12.0)) / 2.0 == 0.0
     assert abs(inputs[0, 5, 5].item()) < 1e-4
 
@@ -219,7 +219,7 @@ def test_build_sen1floods11_dataset_matches_real_layout(fixture_root):
     )
 
     assert len(dataset) == 2
-    inputs, label = dataset[0]
+    inputs, label, _ = dataset[0]
     assert inputs.shape == (5, CHIP_SIZE, CHIP_SIZE)
 
 
@@ -261,6 +261,6 @@ def test_dataset_output_matches_directly_built_terrain_cache(fixture_root):
         terrain_cache=None,
     )
 
-    inputs_cached, _ = with_cache[0]
-    inputs_direct, _ = without_cache[0]
+    inputs_cached, _, _ = with_cache[0]
+    inputs_direct, _, _ = without_cache[0]
     assert torch.equal(inputs_cached, inputs_direct)

@@ -17,7 +17,13 @@ from omegaconf import OmegaConf
 
 from training.checkpoint import find_latest_checkpoint
 from training.config import TrainConfig
-from training.train import _maybe_resume_from_latest, build_dataloader, run_training
+from training.train import (
+    _maybe_resume_from_latest,
+    build_dataloader,
+    build_val_dataloader,
+    run_training,
+    run_validation,
+)
 
 CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "training" / "conf")
 
@@ -331,3 +337,142 @@ def test_requeue_simulation_resumes_automatically_without_explicit_resume_from(t
     result = run_training(cfg_2)
 
     assert result["global_step"] == 4
+
+
+def test_run_validation_scores_every_chip_in_the_dataloader():
+    from models.unet import build_unet
+
+    cfg = _tiny_cfg("unused")  # only dataset fields are read here
+    dataloader = build_val_dataloader(cfg)
+    model = build_unet(encoder_weights=None)
+
+    summary = run_validation(model, dataloader, "cpu", torch.float32, use_amp=False)
+
+    assert summary.n_chips == cfg.dataset.num_samples
+    assert 0.0 <= summary.mean_iou <= 1.0 or torch.isnan(torch.tensor(summary.mean_iou))
+
+
+def test_run_validation_does_not_change_model_weights():
+    # Regression check: validation must be read-only. If it ever left
+    # BatchNorm running stats (or anything else) mutated, "validating"
+    # would itself change what gets trained on next, and worse, would
+    # silently break the resume-exactness guarantee tested above.
+    from models.unet import build_unet
+
+    cfg = _tiny_cfg("unused")
+    dataloader = build_val_dataloader(cfg)
+    model = build_unet(encoder_weights=None)
+    before = {k: v.clone() for k, v in model.state_dict().items()}
+
+    run_validation(model, dataloader, "cpu", torch.float32, use_amp=False)
+
+    after = model.state_dict()
+    for key in before:
+        assert torch.equal(before[key], after[key]), f"validation changed {key}"
+
+
+def test_run_training_reports_best_val_iou(tmp_path):
+    cfg = _tiny_cfg(tmp_path, epochs=2, checkpoint_every_steps=4)
+    result = run_training(cfg)
+
+    assert result["best_val_iou"] is not None
+    assert result["stopped_early"] is False
+
+
+def test_run_training_saves_best_checkpoint(tmp_path):
+    cfg = _tiny_cfg(tmp_path, epochs=2, checkpoint_every_steps=4)
+    run_training(cfg)
+
+    assert (tmp_path / "best.pt").exists()
+
+
+def test_validate_every_epochs_skips_intermediate_epochs(tmp_path, monkeypatch):
+    import training.train as train_module
+    from benchmarks.metrics import MetricSummary
+
+    call_count = 0
+
+    def fake_run_validation(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return MetricSummary(
+            mean_iou=0.5,
+            median_iou=0.5,
+            mean_f1=0.5,
+            mean_precision=0.5,
+            mean_recall=0.5,
+            n_chips=1,
+        )
+
+    monkeypatch.setattr(train_module, "run_validation", fake_run_validation)
+
+    cfg = _tiny_cfg(tmp_path, epochs=4, checkpoint_every_steps=8, validate_every_epochs=2)
+    run_training(cfg)
+
+    # 4 epochs, validating every 2nd -> exactly 2 validation calls (epochs 2 and 4).
+    assert call_count == 2
+
+
+def test_early_stopping_triggers_after_patience_exceeded(tmp_path, monkeypatch):
+    import training.train as train_module
+    from benchmarks.metrics import MetricSummary
+
+    # A constant score never counts as an "improvement" after the first
+    # validation call, so patience=2 should stop training after exactly
+    # 1 (the initial best) + 2 (no-improvement) = 3 validation checks,
+    # well before the configured epochs=10 would otherwise finish.
+    def fake_run_validation(*args, **kwargs):
+        return MetricSummary(
+            mean_iou=0.5,
+            median_iou=0.5,
+            mean_f1=0.5,
+            mean_precision=0.5,
+            mean_recall=0.5,
+            n_chips=1,
+        )
+
+    monkeypatch.setattr(train_module, "run_validation", fake_run_validation)
+
+    cfg = _tiny_cfg(
+        tmp_path,
+        epochs=10,
+        checkpoint_every_steps=100,
+        early_stopping_patience=2,
+        validate_every_epochs=1,
+    )
+    result = run_training(cfg)
+
+    steps_per_epoch = cfg.dataset.num_samples // cfg.dataset.batch_size
+    assert result["stopped_early"] is True
+    assert result["global_step"] < cfg.epochs * steps_per_epoch
+    # Stopped after the 3rd validation check (epoch 3): 1 improvement + 2
+    # no-improvement checks meeting patience=2.
+    assert result["global_step"] == 3 * steps_per_epoch
+
+
+def test_early_stopping_saves_final_checkpoint_before_stopping(tmp_path, monkeypatch):
+    import training.train as train_module
+    from benchmarks.metrics import MetricSummary
+
+    def fake_run_validation(*args, **kwargs):
+        return MetricSummary(
+            mean_iou=0.5,
+            median_iou=0.5,
+            mean_f1=0.5,
+            mean_precision=0.5,
+            mean_recall=0.5,
+            n_chips=1,
+        )
+
+    monkeypatch.setattr(train_module, "run_validation", fake_run_validation)
+
+    cfg = _tiny_cfg(
+        tmp_path,
+        epochs=10,
+        checkpoint_every_steps=1,
+        early_stopping_patience=2,
+        validate_every_epochs=1,
+    )
+    result = run_training(cfg)
+
+    assert (tmp_path / f"step_{result['global_step']}.pt").exists()

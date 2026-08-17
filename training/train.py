@@ -23,6 +23,7 @@ import wandb
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
 
+from benchmarks.metrics import MetricSummary, compute_chip_metrics, summarize
 from data.contract import LABEL_IGNORE, LABEL_NON_WATER, LABEL_WATER, NUM_CHANNELS
 from models.losses import build_loss
 from models.unet import build_unet
@@ -90,10 +91,26 @@ class SyntheticFloodDataset(Dataset):
         return self.num_samples
 
     def __getitem__(self, idx):
-        return self.inputs[idx], self.labels[idx]
+        # A synthetic-but-real-shaped chip id (not just the input/label
+        # tensors), so run_validation exercises the exact same code path
+        # against synthetic data that it does against real chips --
+        # benchmarks.metrics.compute_chip_metrics needs a chip id for
+        # every prediction it scores, real or synthetic.
+        return self.inputs[idx], self.labels[idx], f"synthetic_{idx}"
 
 
-def build_dataloader(cfg) -> DataLoader:
+def build_dataloader(
+    cfg,
+    split_csv_name: str | None = None,
+    shuffle: bool | None = None,
+) -> DataLoader:
+    """
+    split_csv_name/shuffle let build_val_dataloader (below) reuse this
+    function for the validation split instead of duplicating the
+    dataset-construction branch -- validation always wants a different
+    split file and shuffle=False (order doesn't matter for scoring, and
+    a fixed order makes debugging a specific chip's score easier).
+    """
     if cfg.dataset.name == "synthetic":
         dataset = SyntheticFloodDataset(
             num_samples=cfg.dataset.num_samples,
@@ -110,7 +127,9 @@ def build_dataloader(cfg) -> DataLoader:
         stats = NormalizationStats.load(cfg.dataset.normalization_stats_path)
         dataset = build_sen1floods11_dataset(
             data_root=cfg.dataset.data_root,
-            split_csv_name=cfg.dataset.split_csv_name,
+            split_csv_name=(
+                split_csv_name if split_csv_name is not None else cfg.dataset.split_csv_name
+            ),
             normalization_stats=stats,
         )
     else:
@@ -118,7 +137,12 @@ def build_dataloader(cfg) -> DataLoader:
             f"dataset {cfg.dataset.name!r} isn't wired up yet -- 'synthetic' and "
             "'sen1floods11' are the only options implemented so far."
         )
-    return DataLoader(dataset, batch_size=cfg.dataset.batch_size, shuffle=cfg.dataset.shuffle)
+    resolved_shuffle = cfg.dataset.shuffle if shuffle is None else shuffle
+    return DataLoader(dataset, batch_size=cfg.dataset.batch_size, shuffle=resolved_shuffle)
+
+
+def build_val_dataloader(cfg) -> DataLoader:
+    return build_dataloader(cfg, split_csv_name=cfg.dataset.val_split_csv_name, shuffle=False)
 
 
 def _loss_kwargs(loss_cfg) -> dict:
@@ -153,12 +177,55 @@ def build_optimizer_and_scheduler(cfg, model: torch.nn.Module, total_steps: int)
     return optimizer, scheduler
 
 
+def run_validation(
+    model: torch.nn.Module,
+    dataloader: DataLoader,
+    device: str,
+    amp_dtype: torch.dtype,
+    use_amp: bool,
+) -> MetricSummary:
+    """
+    Scores the model against `dataloader` with benchmarks/metrics.py --
+    the exact same per-chip IoU/F1/precision/recall computation the
+    classical baselines (Otsu, Otsu+HAND, Random Forest) were measured
+    with in benchmarks/RESULTS.md. That's not incidental: Phase 3's exit
+    criterion is "U-Net beats all classical baselines", which is only a
+    meaningful comparison if both sides were scored the same way, not by
+    two different metric implementations that might disagree at the
+    margins.
+
+    Threshold is a fixed 0.5 on sigmoid(logits) -- the standard default
+    for binary segmentation, and the same implicit threshold the loss
+    functions (models/losses.py) are built around.
+    """
+    model.eval()
+    chip_metrics = []
+    with torch.no_grad():
+        for inputs, targets, chip_ids in dataloader:
+            inputs = inputs.to(device)
+            with torch.autocast(device_type=device, dtype=amp_dtype, enabled=use_amp):
+                logits = model(inputs)
+            predicted_water = (torch.sigmoid(logits) > 0.5).squeeze(1).cpu().numpy()
+            targets_np = targets.numpy()
+            for i, chip_id in enumerate(chip_ids):
+                chip_metrics.append(
+                    compute_chip_metrics(chip_id, predicted_water[i], targets_np[i])
+                )
+    model.train()
+    return summarize(chip_metrics)
+
+
 def run_training(cfg, max_steps: int | None = None) -> dict:
     """
     Builds the model, loss, optimizer/scheduler, and dataloader from
     `cfg`; optionally resumes from cfg.resume_from; then trains for
     cfg.epochs worth of steps, checkpointing every
     cfg.checkpoint_every_steps steps (and always at the final step).
+    Validates against the held-out split every cfg.validate_every_epochs
+    epochs, saving a separate best.pt checkpoint whenever val IoU
+    improves, and stops early if it hasn't improved for
+    cfg.early_stopping_patience validation checks in a row (spec section
+    4.2: "early stopping on val IoU").
 
     cfg.epochs always determines the *overall* training target -- it must
     stay the same across every invocation of a given run, resumed or not,
@@ -180,6 +247,7 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
     device = resolve_device(cfg.device)
 
     dataloader = build_dataloader(cfg)
+    val_dataloader = build_val_dataloader(cfg)
     steps_per_epoch = len(dataloader)
     total_steps = cfg.epochs * steps_per_epoch
 
@@ -235,9 +303,12 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
     data_iter = _infinite_batches(dataloader)
     last_loss = None
     stop_at = total_steps if max_steps is None else min(total_steps, global_step + max_steps)
+    best_val_iou = float("-inf")
+    epochs_without_improvement = 0
+    stopped_early = False
 
     while global_step < stop_at:
-        inputs, targets = next(data_iter)
+        inputs, targets, _ = next(data_iter)
         inputs, targets = inputs.to(device), targets.to(device)
 
         optimizer.zero_grad()
@@ -263,6 +334,50 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
                 step=global_step,
             )
 
+        # Validation runs *before* the periodic checkpoint below,
+        # deliberately: iterating a DataLoader consumes one draw from the
+        # global RNG even with shuffle=False (it generates a base seed for
+        # potential worker processes regardless of num_workers -- confirmed
+        # directly, not assumed, since it's a genuinely non-obvious PyTorch
+        # internal). If the periodic checkpoint ran first, it would capture
+        # RNG state from *before* validation's draw, so a resumed run
+        # wouldn't replay that draw the way an uninterrupted run's
+        # continuous RNG stream naturally would -- the two would silently
+        # diverge at the next shuffle. Ordering validation first means the
+        # checkpoint always captures the true post-validation state.
+        if global_step % steps_per_epoch == 0:
+            epoch = global_step // steps_per_epoch
+            if epoch % cfg.validate_every_epochs == 0:
+                val_summary = run_validation(model, val_dataloader, device, amp_dtype, use_amp)
+                wandb.log(
+                    {
+                        "val/mean_iou": val_summary.mean_iou,
+                        "val/median_iou": val_summary.median_iou,
+                        "val/mean_f1": val_summary.mean_f1,
+                        "val/mean_precision": val_summary.mean_precision,
+                        "val/mean_recall": val_summary.mean_recall,
+                    },
+                    step=global_step,
+                )
+
+                if val_summary.mean_iou > best_val_iou:
+                    best_val_iou = val_summary.mean_iou
+                    epochs_without_improvement = 0
+                    save_checkpoint(
+                        Path(cfg.checkpoint_dir) / "best.pt",
+                        model,
+                        optimizer,
+                        scheduler,
+                        global_step,
+                        epoch,
+                        cfg,
+                        wandb_run_id=wandb_run.id,
+                    )
+                else:
+                    epochs_without_improvement += 1
+                    if epochs_without_improvement >= cfg.early_stopping_patience:
+                        stopped_early = True
+
         if global_step % cfg.checkpoint_every_steps == 0 or global_step == total_steps:
             epoch = global_step // steps_per_epoch
             checkpoint_path = Path(cfg.checkpoint_dir) / f"step_{global_step}.pt"
@@ -277,8 +392,17 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
                 wandb_run_id=wandb_run.id,
             )
 
+        if stopped_early:
+            break
+
     wandb.finish()
-    return {"global_step": global_step, "final_loss": last_loss, "model": model}
+    return {
+        "global_step": global_step,
+        "final_loss": last_loss,
+        "model": model,
+        "best_val_iou": best_val_iou if best_val_iou != float("-inf") else None,
+        "stopped_early": stopped_early,
+    }
 
 
 def _maybe_resume_from_latest(cfg) -> None:

@@ -44,7 +44,11 @@ from data.sen1floods11 import Sen1Floods11Dataset
 class Sen1Floods11TorchDataset(Dataset):
     """
     A torch Dataset yielding data-contract-conformant (data/contract.py)
-    5-channel input tensors and label tensors for one Sen1Floods11 split.
+    5-channel input tensors, label tensors, and the chip id (e.g.
+    "Bolivia_103757") for one Sen1Floods11 split. The chip id is what
+    lets validation (training/train.py's run_validation) score results
+    with benchmarks/metrics.py the same way the classical baselines were
+    scored -- per-chip, with the flood event recoverable from the id.
 
     terrain_cache is optional but strongly recommended for anything beyond
     a single pass over the data -- see this module's docstring. Pass one
@@ -69,7 +73,7 @@ class Sen1Floods11TorchDataset(Dataset):
     def __len__(self) -> int:
         return len(self._dataset)
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, str]:
         sample = self._dataset[index]
         slope, hand = get_terrain(sample.chip_id, self._dem_dir, self._terrain_cache)
 
@@ -97,7 +101,7 @@ class Sen1Floods11TorchDataset(Dataset):
         validate_input_tensor(full)
         validate_label_tensor(sample.label)
 
-        return torch.from_numpy(full), torch.from_numpy(sample.label)
+        return torch.from_numpy(full), torch.from_numpy(sample.label), sample.chip_id
 
 
 def build_sen1floods11_dataset(
