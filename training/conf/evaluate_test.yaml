@@ -1,0 +1,23 @@
+# Config for training/evaluate_test.py -- deliberately separate from
+# conf/config.yaml (the training entrypoint's config) rather than adding
+# a `checkpoint` field to TrainConfig itself: evaluating a checkpoint
+# against the test split isn't a training run, and run_training's own
+# config shouldn't carry a field that's meaningless everywhere except
+# this one script.
+#
+# Reuses the same model/dataset config groups training does, so a
+# checkpoint is always evaluated with the exact architecture/dataset
+# config it names -- override on the command line, e.g.:
+#   python -m training.evaluate_test checkpoint=checkpoints/best.pt dataset=sen1floods11
+defaults:
+  - model: unet_resnet34
+  - dataset: sen1floods11
+  - _self_
+
+# ??? (Hydra/OmegaConf's MISSING marker) means this must be passed on
+# the command line -- there's no sensible default checkpoint path, and
+# silently evaluating nothing (or a stale default) would be worse than
+# an explicit error.
+checkpoint: ???
+device: auto
+amp_dtype: fp32

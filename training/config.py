@@ -78,6 +78,13 @@ class DatasetConfig:
     # training/train.py's build_val_dataloader) -- the official
     # Sen1Floods11 validation split, never touched for training itself.
     val_split_csv_name: str = "flood_valid_data.csv"
+    # Used only by training/evaluate_test.py, for the final Phase 3 exit-
+    # criterion comparison against the classical baselines -- never
+    # touched during training or by validate_every_epochs' early-stopping
+    # checks, both of which use val_split_csv_name instead. Scoring
+    # against this split during training would leak it into every
+    # training decision, defeating the point of holding it out.
+    test_split_csv_name: str = "flood_test_data.csv"
     normalization_stats_path: str = "data/sen1floods11_normalization_stats.json"
 
 

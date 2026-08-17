@@ -16,4 +16,5 @@ shuffle: true
 data_root: datasets/sen1floods11
 split_csv_name: flood_train_data.csv
 val_split_csv_name: flood_valid_data.csv
+test_split_csv_name: flood_test_data.csv
 normalization_stats_path: data/sen1floods11_normalization_stats.json
