@@ -17,10 +17,11 @@ from pathlib import Path
 
 from benchmarks.evaluate import (
     build_terrain_cache,
+    compute_per_event_otsu_thresholds,
     evaluate_baseline,
+    make_otsu_hand_predict,
+    make_otsu_predict,
     make_random_forest_predict,
-    otsu_hand_predict,
-    otsu_predict,
     train_random_forest_baseline,
 )
 from benchmarks.hold_one_event_out import run_hold_one_event_out
@@ -41,9 +42,16 @@ def run_official_split(
     ]
     terrain_cache = build_terrain_cache(chip_ids, dem_dir)
 
+    # Thresholds come from the test set's own chips, pooled per event --
+    # see benchmarks/evaluate.py's compute_per_event_otsu_thresholds.
+    event_thresholds = compute_per_event_otsu_thresholds(test_dataset)
     results = {
-        "Otsu": evaluate_baseline(otsu_predict, test_dataset, dem_dir, terrain_cache),
-        "Otsu + HAND": evaluate_baseline(otsu_hand_predict, test_dataset, dem_dir, terrain_cache),
+        "Otsu": evaluate_baseline(
+            make_otsu_predict(event_thresholds), test_dataset, dem_dir, terrain_cache
+        ),
+        "Otsu + HAND": evaluate_baseline(
+            make_otsu_hand_predict(event_thresholds), test_dataset, dem_dir, terrain_cache
+        ),
     }
     rf_model = train_random_forest_baseline(train_dataset, dem_dir, terrain_cache=terrain_cache)
     results["Random Forest"] = evaluate_baseline(

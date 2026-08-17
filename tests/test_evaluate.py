@@ -15,11 +15,12 @@ from rasterio.transform import from_origin
 import data.chip_terrain as chip_terrain_module
 from benchmarks.evaluate import (
     build_terrain_cache,
+    compute_per_event_otsu_thresholds,
     compute_terrain_layers,
     evaluate_baseline,
     load_dem,
-    otsu_hand_predict,
-    otsu_predict,
+    make_otsu_hand_predict,
+    make_otsu_predict,
     train_random_forest_baseline,
 )
 from data.contract import LABEL_NON_WATER, LABEL_WATER
@@ -152,12 +153,59 @@ def test_evaluate_baseline_scores_every_chip(tmp_path):
     split_csv = _write_split(tmp_path, ["Bolivia_1", "Ghana_1"])
 
     dataset = Sen1Floods11Dataset(tmp_path / "S1Hand", tmp_path / "LabelHand", split_csv)
+    event_thresholds = compute_per_event_otsu_thresholds(dataset)
 
-    results = evaluate_baseline(otsu_predict, dataset, tmp_path / "DEMHand")
+    results = evaluate_baseline(make_otsu_predict(event_thresholds), dataset, tmp_path / "DEMHand")
 
     assert len(results) == 2
     assert {m.chip_id for m in results} == {"Bolivia_1", "Ghana_1"}
     assert {m.event for m in results} == {"Bolivia", "Ghana"}
+
+
+def test_compute_per_event_otsu_thresholds_pools_every_chip_in_the_event(tmp_path):
+    # Two Bolivia chips at different constant VH values (evaluate.py
+    # thresholds VH, not VV -- see its module-level _OTSU_BAND_INDEX),
+    # plus a lone Ghana chip -- pooling the two Bolivia chips together
+    # gives Otsu a genuine two-population histogram to split (same shape
+    # as test_otsu.py's make_bimodal_band, just without noise), which a
+    # single constant-valued chip alone couldn't produce.
+    _make_fixture(tmp_path, "Bolivia_1", vv_db=-20.0, vh_db=-25.0)
+    _make_fixture(tmp_path, "Bolivia_2", vv_db=-8.0, vh_db=-12.0)
+    _make_fixture(tmp_path, "Ghana_1", vv_db=-14.0, vh_db=-18.0)
+    split_csv = _write_split(tmp_path, ["Bolivia_1", "Bolivia_2", "Ghana_1"])
+    dataset = Sen1Floods11Dataset(tmp_path / "S1Hand", tmp_path / "LabelHand", split_csv)
+
+    thresholds = compute_per_event_otsu_thresholds(dataset)
+
+    assert set(thresholds) == {"Bolivia", "Ghana"}
+    # Bolivia's threshold has to land strictly between its own two chips'
+    # constant VH values -- only possible if both chips' pixels actually
+    # got pooled into one histogram together, not computed from just one.
+    assert -25.0 < thresholds["Bolivia"] < -12.0
+
+
+def test_compute_per_event_otsu_thresholds_omits_events_with_no_finite_pixels(tmp_path):
+    # A real all-NaN chip on disk, like the real Paraguay_34417 test chip
+    # (scene-edge no-data), not just a synthetic in-memory sample -- this
+    # exercises compute_per_event_otsu_thresholds' own dataset[i] disk
+    # read, not otsu_water_mask's fallback in isolation.
+    (tmp_path / "S1Hand").mkdir(exist_ok=True)
+    (tmp_path / "LabelHand").mkdir(exist_ok=True)
+    nan_vv_vh = np.full((CHIP_SIZE, CHIP_SIZE), np.nan, dtype=np.float32)
+    _write_s1_image(tmp_path / "S1Hand" / "Paraguay_1_S1Hand.tif", nan_vv_vh, nan_vv_vh)
+    _write_label(
+        tmp_path / "LabelHand" / "Paraguay_1_LabelHand.tif",
+        np.full((CHIP_SIZE, CHIP_SIZE), LABEL_NON_WATER, dtype=np.int16),
+    )
+    dataset = Sen1Floods11Dataset.from_pairs(
+        tmp_path / "S1Hand",
+        tmp_path / "LabelHand",
+        [("Paraguay_1_S1Hand.tif", "Paraguay_1_LabelHand.tif")],
+    )
+
+    thresholds = compute_per_event_otsu_thresholds(dataset)
+
+    assert thresholds == {}
 
 
 def test_train_random_forest_baseline_produces_a_working_model(tmp_path):
@@ -176,9 +224,12 @@ def test_evaluate_baseline_rejects_missing_dem(tmp_path):
     _make_fixture(tmp_path, "Bolivia_1", vv_db=-20.0, vh_db=-25.0)
     split_csv = _write_split(tmp_path, ["Bolivia_1"])
     dataset = Sen1Floods11Dataset(tmp_path / "S1Hand", tmp_path / "LabelHand", split_csv)
+    event_thresholds = compute_per_event_otsu_thresholds(dataset)
 
     with pytest.raises(rasterio.errors.RasterioIOError):
-        evaluate_baseline(otsu_predict, dataset, tmp_path / "nonexistent_dem_dir")
+        evaluate_baseline(
+            make_otsu_predict(event_thresholds), dataset, tmp_path / "nonexistent_dem_dir"
+        )
 
 
 def _all_nan_vv_sample() -> Sen1Floods11Sample:
@@ -188,23 +239,26 @@ def _all_nan_vv_sample() -> Sen1Floods11Sample:
     return Sen1Floods11Sample(image=image, label=label, chip_id="Paraguay_34417")
 
 
-def test_otsu_predict_falls_back_to_all_non_water_on_entirely_nan_vv():
+def test_otsu_predict_falls_back_to_all_non_water_when_event_has_no_threshold():
+    # An empty threshold map is exactly what compute_per_event_otsu_thresholds
+    # would produce for an event whose every chip is entirely NaN in VV --
+    # there's no finite pixel anywhere to pool a threshold from.
     sample = _all_nan_vv_sample()
     slope = np.zeros((CHIP_SIZE, CHIP_SIZE), dtype=np.float32)
     hand = np.zeros((CHIP_SIZE, CHIP_SIZE), dtype=np.float32)
 
-    predicted = otsu_predict(sample, slope, hand)
+    predicted = make_otsu_predict({})(sample, slope, hand)
 
     assert predicted.shape == (CHIP_SIZE, CHIP_SIZE)
     assert not predicted.any()
 
 
-def test_otsu_hand_predict_falls_back_to_all_non_water_on_entirely_nan_vv():
+def test_otsu_hand_predict_falls_back_to_all_non_water_when_event_has_no_threshold():
     sample = _all_nan_vv_sample()
     slope = np.zeros((CHIP_SIZE, CHIP_SIZE), dtype=np.float32)
     hand = np.zeros((CHIP_SIZE, CHIP_SIZE), dtype=np.float32)
 
-    predicted = otsu_hand_predict(sample, slope, hand)
+    predicted = make_otsu_hand_predict({})(sample, slope, hand)
 
     assert predicted.shape == (CHIP_SIZE, CHIP_SIZE)
     assert not predicted.any()
@@ -227,10 +281,11 @@ def test_evaluate_baseline_uses_terrain_cache_instead_of_dem_dir(tmp_path):
     split_csv = _write_split(tmp_path, ["Bolivia_1"])
     dataset = Sen1Floods11Dataset(tmp_path / "S1Hand", tmp_path / "LabelHand", split_csv)
     terrain_cache = build_terrain_cache(["Bolivia_1"], tmp_path / "DEMHand")
+    event_thresholds = compute_per_event_otsu_thresholds(dataset)
 
     # dem_dir points nowhere; this only succeeds if the cache is actually used.
     results = evaluate_baseline(
-        otsu_predict, dataset, tmp_path / "nonexistent_dem_dir", terrain_cache
+        make_otsu_predict(event_thresholds), dataset, tmp_path / "nonexistent_dem_dir", terrain_cache
     )
 
     assert len(results) == 1

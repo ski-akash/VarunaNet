@@ -22,10 +22,11 @@ from benchmarks.metrics import (
     ChipMetrics,
     MetricSummary,
     compute_chip_metrics,
+    event_name,
     summarize,
     summarize_per_event,
 )
-from benchmarks.otsu import otsu_water_mask
+from benchmarks.otsu import compute_otsu_threshold, otsu_water_mask, smooth_backscatter
 from benchmarks.otsu_hand import otsu_hand_water_mask
 from benchmarks.random_forest import (
     build_pixel_features,
@@ -69,35 +70,83 @@ __all__ = [
 PredictFn = Callable[[Sen1Floods11Sample, np.ndarray, np.ndarray], np.ndarray]
 
 
-def _otsu_or_all_non_water(compute: Callable[[], np.ndarray], shape: tuple[int, int]) -> np.ndarray:
+# sample.image is [VV_db, VH_db, VV_VH_ratio] (data/sen1floods11.py).
+# VH, not VV, is what this project's Otsu baseline actually thresholds --
+# confirmed against real evidence (see benchmarks/otsu.py's module
+# docstring), not the original assumption that VV (the more commonly
+# cited band for water detection in SAR literature generally) was right
+# for this specific dataset's published baseline.
+_OTSU_BAND_INDEX = 1
+
+
+def _smoothed_otsu_band(sample: Sen1Floods11Sample) -> np.ndarray:
+    return smooth_backscatter(sample.image[_OTSU_BAND_INDEX])
+
+
+def compute_per_event_otsu_thresholds(dataset: Sen1Floods11Dataset) -> dict[str, float]:
     """
-    otsu_water_mask -- and by extension otsu_hand_water_mask, which calls it
-    internally -- deliberately raises ValueError when a chip's VV band is
-    entirely NaN, since there's no histogram to threshold at all. This is a
-    real edge case in the test split (Paraguay_34417 is entirely NaN in VV,
-    a scene-edge no-data artifact, not a bug), so the
-    harness catches it here and falls back to predicting the whole chip as
-    non-water, the same convention benchmarks/random_forest.py already uses
-    for individual NaN pixels.
+    Otsu's method needs a real amount of bimodal signal (dark water vs.
+    bright land) to find a good split; a single 512x512 chip often
+    doesn't have enough of both classes in it to do that well -- most
+    chips are mostly-dry. The published Sen1Floods11 baseline numbers
+    (Bonafilia et al., CVPRW 2020) threshold Otsu per *flood event*, not
+    per individual chip: every chip from the same event shares an
+    acquisition and noise floor, so pooling them gives Otsu a real
+    histogram to work with. Confirmed directly against this project's own
+    data that doing the same thing here recovers a real chunk of the gap
+    to the published number (official test split, per-chip VV: mean IoU
+    0.211 -> per-event VV: 0.224 -> per-event VH+denoised: 0.27+, see
+    benchmarks/otsu.py's module docstring for the full chain of evidence).
+
+    Pools every finite (post-denoising) pixel across all of an event's
+    chips within `dataset` and computes one Otsu threshold per event. An
+    event whose every chip is entirely NaN (no finite pixels anywhere)
+    simply gets no entry -- make_otsu_predict/make_otsu_hand_predict fall
+    back to "no water anywhere" for those chips, the same as a single NaN
+    chip would if asked to threshold itself from nothing.
     """
-    try:
-        return compute()
-    except ValueError as error:
-        if "no finite VV values" not in str(error):
-            raise
-        return np.zeros(shape, dtype=bool)
+    pixels_by_event: dict[str, list[np.ndarray]] = {}
+    for i in range(len(dataset)):
+        sample = dataset[i]
+        band = _smoothed_otsu_band(sample)
+        finite = band[np.isfinite(band)]
+        if finite.size > 0:
+            pixels_by_event.setdefault(event_name(sample.chip_id), []).append(finite)
+
+    return {
+        event: compute_otsu_threshold(np.concatenate(chunks))
+        for event, chunks in pixels_by_event.items()
+    }
 
 
-def otsu_predict(sample: Sen1Floods11Sample, slope: np.ndarray, hand: np.ndarray) -> np.ndarray:
-    vv_db = sample.image[0]
-    return _otsu_or_all_non_water(lambda: otsu_water_mask(vv_db), vv_db.shape)
+def make_otsu_predict(event_thresholds: dict[str, float]) -> PredictFn:
+    """
+    Binds a per-event threshold map (see compute_per_event_otsu_thresholds
+    above) into a PredictFn. A chip whose event has no entry (every chip
+    in that event was entirely NaN) predicts no water anywhere.
+    """
+
+    def predict(sample: Sen1Floods11Sample, slope: np.ndarray, hand: np.ndarray) -> np.ndarray:
+        band = _smoothed_otsu_band(sample)
+        threshold = event_thresholds.get(event_name(sample.chip_id))
+        if threshold is None:
+            return np.zeros(band.shape, dtype=bool)
+        return otsu_water_mask(band, threshold)
+
+    return predict
 
 
-def otsu_hand_predict(
-    sample: Sen1Floods11Sample, slope: np.ndarray, hand: np.ndarray
-) -> np.ndarray:
-    vv_db = sample.image[0]
-    return _otsu_or_all_non_water(lambda: otsu_hand_water_mask(vv_db, hand, slope), vv_db.shape)
+def make_otsu_hand_predict(event_thresholds: dict[str, float]) -> PredictFn:
+    """Same per-event threshold binding as make_otsu_predict, refined with HAND/slope."""
+
+    def predict(sample: Sen1Floods11Sample, slope: np.ndarray, hand: np.ndarray) -> np.ndarray:
+        band = _smoothed_otsu_band(sample)
+        threshold = event_thresholds.get(event_name(sample.chip_id))
+        if threshold is None:
+            return np.zeros(band.shape, dtype=bool)
+        return otsu_hand_water_mask(band, hand, slope, otsu_threshold=threshold)
+
+    return predict
 
 
 def make_random_forest_predict(model: RandomForestClassifier) -> PredictFn:
@@ -190,8 +239,17 @@ if __name__ == "__main__":
     train_dataset = Sen1Floods11Dataset(IMAGE_DIR, LABEL_DIR, SPLITS_DIR / "flood_train_data.csv")
     test_dataset = Sen1Floods11Dataset(IMAGE_DIR, LABEL_DIR, SPLITS_DIR / "flood_test_data.csv")
 
-    print_report("Otsu", evaluate_baseline(otsu_predict, test_dataset, DEM_DIR))
-    print_report("Otsu + HAND", evaluate_baseline(otsu_hand_predict, test_dataset, DEM_DIR))
+    # Thresholds come from the test set's own chips, same as the original
+    # per-chip version did (Otsu doesn't train -- there's no separate fit
+    # step) -- just pooled per event now instead of computed fresh per chip.
+    event_thresholds = compute_per_event_otsu_thresholds(test_dataset)
+    print_report(
+        "Otsu", evaluate_baseline(make_otsu_predict(event_thresholds), test_dataset, DEM_DIR)
+    )
+    print_report(
+        "Otsu + HAND",
+        evaluate_baseline(make_otsu_hand_predict(event_thresholds), test_dataset, DEM_DIR),
+    )
 
     rf_model = train_random_forest_baseline(train_dataset, DEM_DIR)
     rf_results = evaluate_baseline(make_random_forest_predict(rf_model), test_dataset, DEM_DIR)

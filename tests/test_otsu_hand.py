@@ -1,7 +1,9 @@
 """
 Tests for Otsu+HAND refinement, using a synthetic scene with a "radar
-shadow" patch: dark in VV like water, but on steep, high-HAND terrain
-that should never actually flood.
+shadow" patch: dark in the backscatter band like water, but on steep,
+high-HAND terrain that should never actually flood. otsu_hand_water_mask
+is band-agnostic (see benchmarks/otsu_hand.py) -- these tests don't need
+to care that benchmarks/evaluate.py actually feeds it VH in practice.
 """
 
 import numpy as np
@@ -12,34 +14,34 @@ from benchmarks.otsu_hand import otsu_hand_water_mask
 
 def make_scene(size: int = 64):
     rng = np.random.default_rng(seed=1)
-    vv_db = np.empty((size, size), dtype=np.float32)
-    vv_db[:, : size // 2] = rng.normal(loc=-20.0, scale=0.5, size=(size, size // 2))
-    vv_db[:, size // 2 :] = rng.normal(loc=-8.0, scale=0.5, size=(size, size // 2))
+    band_db = np.empty((size, size), dtype=np.float32)
+    band_db[:, : size // 2] = rng.normal(loc=-20.0, scale=0.5, size=(size, size // 2))
+    band_db[:, size // 2 :] = rng.normal(loc=-8.0, scale=0.5, size=(size, size // 2))
 
     hand = np.full((size, size), 2.0, dtype=np.float32)
     slope = np.full((size, size), 1.0, dtype=np.float32)
 
-    # A patch that's dark in VV (Otsu alone would call it water) but sits
-    # high above drainage on steep terrain -- classic radar shadow, not water.
+    # A patch that's dark (Otsu alone would call it water) but sits high
+    # above drainage on steep terrain -- classic radar shadow, not water.
     shadow_region = np.s_[10:20, 10:20]
     hand[shadow_region] = 50.0
     slope[shadow_region] = 20.0
 
-    return vv_db, hand, slope, shadow_region
+    return band_db, hand, slope, shadow_region
 
 
 def test_otsu_hand_excludes_radar_shadow():
-    vv_db, hand, slope, shadow_region = make_scene()
+    band_db, hand, slope, shadow_region = make_scene()
 
-    predicted_water = otsu_hand_water_mask(vv_db, hand, slope)
+    predicted_water = otsu_hand_water_mask(band_db, hand, slope)
 
     assert not predicted_water[shadow_region].any()
 
 
 def test_otsu_hand_keeps_plausible_water_elsewhere():
-    vv_db, hand, slope, shadow_region = make_scene()
+    band_db, hand, slope, shadow_region = make_scene()
 
-    predicted_water = otsu_hand_water_mask(vv_db, hand, slope)
+    predicted_water = otsu_hand_water_mask(band_db, hand, slope)
     raw_water = predicted_water.copy()
     raw_water[shadow_region] = True  # ignore the deliberately-excluded patch
 
@@ -51,9 +53,22 @@ def test_otsu_hand_keeps_plausible_water_elsewhere():
 
 
 def test_otsu_hand_rejects_shape_mismatch():
-    vv_db = np.zeros((8, 8), dtype=np.float32)
+    band_db = np.zeros((8, 8), dtype=np.float32)
     hand = np.zeros((8, 9), dtype=np.float32)
     slope = np.zeros((8, 8), dtype=np.float32)
 
     with pytest.raises(ValueError, match="shape mismatch"):
-        otsu_hand_water_mask(vv_db, hand, slope)
+        otsu_hand_water_mask(band_db, hand, slope)
+
+
+def test_otsu_hand_water_mask_passes_precomputed_threshold_through_to_otsu():
+    band_db, hand, slope, _shadow_region = make_scene()
+
+    # threshold=0.0 forces every pixel to read as candidate water in the
+    # underlying otsu_water_mask (see test_otsu.py's equivalent case) --
+    # the terrain mask here is uniform aside from the shadow patch, so
+    # the whole non-shadow region should come back water.
+    predicted_water = otsu_hand_water_mask(band_db, hand, slope, otsu_threshold=0.0)
+
+    non_shadow = predicted_water.copy()
+    assert non_shadow[0, 0]  # top-left corner: outside the shadow patch, terrain is plausible

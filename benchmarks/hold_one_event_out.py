@@ -26,10 +26,11 @@ from pathlib import Path
 
 from benchmarks.evaluate import (
     build_terrain_cache,
+    compute_per_event_otsu_thresholds,
     evaluate_baseline,
+    make_otsu_hand_predict,
+    make_otsu_predict,
     make_random_forest_predict,
-    otsu_hand_predict,
-    otsu_predict,
     print_report,
     train_random_forest_baseline,
 )
@@ -93,11 +94,20 @@ def run_hold_one_event_out(
         test_dataset = Sen1Floods11Dataset.from_pairs(image_dir, label_dir, test_pairs)
         train_dataset = Sen1Floods11Dataset.from_pairs(image_dir, label_dir, train_pairs)
 
+        # test_dataset is exactly the held-out event's chips, so this
+        # naturally produces one pooled threshold for that one event --
+        # same "thresholds come from the test set's own chips" reasoning
+        # as the official-split version in evaluate.py's __main__.
+        event_thresholds = compute_per_event_otsu_thresholds(test_dataset)
         results["Otsu"].extend(
-            evaluate_baseline(otsu_predict, test_dataset, dem_dir, terrain_cache)
+            evaluate_baseline(
+                make_otsu_predict(event_thresholds), test_dataset, dem_dir, terrain_cache
+            )
         )
         results["Otsu + HAND"].extend(
-            evaluate_baseline(otsu_hand_predict, test_dataset, dem_dir, terrain_cache)
+            evaluate_baseline(
+                make_otsu_hand_predict(event_thresholds), test_dataset, dem_dir, terrain_cache
+            )
         )
 
         rf_model = train_random_forest_baseline(
