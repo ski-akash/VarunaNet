@@ -6,7 +6,10 @@ import {
   type MapGeoJSONFeature,
 } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { CURRENT_FLOOD_REPORT } from '../lib/currentFloodReports'
+import FloodReportBadge from './FloodReportBadge'
 import LayerToggles, { type LayerToggleState } from './LayerToggles'
+import SeverityLegend from './SeverityLegend'
 
 const DEFAULT_LAYER_TOGGLES: LayerToggleState = {
   stateBorders: true,
@@ -148,13 +151,42 @@ function addIndiaLayers(
     },
   })
 
+  map.addSource('india-districts', { type: 'geojson', data: DISTRICTS_GEOJSON_URL })
+
+  // Real, sourced, current news reports (see lib/currentFloodReports.ts)
+  // -- deliberately NOT the severity-gradient palette (severityColor.ts):
+  // that scale is reserved for real SAR-measured extent, which this
+  // isn't. Cross-hatch-style dashed outline plus a light fill, so it
+  // reads as "flagged from a report" rather than "precisely measured",
+  // and stays visually distinct from every other layer on this map.
+  map.addLayer({
+    id: 'reported-flood-affected-fill',
+    type: 'fill',
+    source: 'india-districts',
+    filter: ['in', ['get', 'name'], ['literal', [...CURRENT_FLOOD_REPORT.affectedDistricts]]],
+    paint: {
+      'fill-color': '#e31a1c',
+      'fill-opacity': 0.35,
+    },
+  })
+  map.addLayer({
+    id: 'reported-flood-affected-outline',
+    type: 'line',
+    source: 'india-districts',
+    filter: ['in', ['get', 'name'], ['literal', [...CURRENT_FLOOD_REPORT.affectedDistricts]]],
+    paint: {
+      'line-color': '#7f0000',
+      'line-width': 1.5,
+      'line-dasharray': [1, 1],
+    },
+  })
+
   // Added before the state-border layer below (MapLibre draws later
   // layers on top), so where a district edge coincides with a state
   // edge, the more prominent dashed state line wins visually -- district
   // lines only really stand out on internal, within-state boundaries,
   // keeping the state/district hierarchy visually readable rather than
   // both styles fighting for the same pixels.
-  map.addSource('india-districts', { type: 'geojson', data: DISTRICTS_GEOJSON_URL })
   map.addLayer({
     id: 'india-district-borders',
     type: 'line',
@@ -248,12 +280,23 @@ function addIndiaLayers(
   })
 }
 
-export default function MapView() {
+interface MapViewProps {
+  // Notified whenever the selected state changes (click, or back-to-India
+  // clearing it) -- lets App.tsx offer a "generate report for this state"
+  // action without MapView needing to know anything about reports itself.
+  onSelectionChange?: (stateName: string | null) => void
+}
+
+export default function MapView({ onSelectionChange }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const selectedRef = useRef<string | number | null>(null)
   const [selectedStateName, setSelectedStateName] = useState<string | null>(null)
   const [layerToggles, setLayerToggles] = useState<LayerToggleState>(DEFAULT_LAYER_TOGGLES)
+
+  useEffect(() => {
+    onSelectionChange?.(selectedStateName)
+  }, [selectedStateName, onSelectionChange])
 
   useEffect(() => {
     if (containerRef.current === null || mapRef.current !== null) {
@@ -340,6 +383,8 @@ export default function MapView() {
         </button>
       )}
       <LayerToggles value={layerToggles} onChange={handleLayerTogglesChange} />
+      <SeverityLegend />
+      <FloodReportBadge />
     </div>
   )
 }
