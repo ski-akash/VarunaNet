@@ -20,6 +20,7 @@ epochs: 1
 checkpoint_dir: checkpoints
 checkpoint_every_steps: 50
 resume_from: null
+init_weights_from: null
 validate_every_epochs: 1
 early_stopping_patience: 5
 
