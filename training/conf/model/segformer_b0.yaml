@@ -1,0 +1,12 @@
+# SegFormer-B0 (Xie et al. 2021): the transformer comparison Phase 4's
+# architecture study calls for (spec section 4.3) -- "is a CNN the right
+# choice here?". Lightweight variant, starting from ADE20K-finetuned
+# segmentation weights (models/segformer.py adapts the first conv for
+# our 5-channel input and replaces the 150-class classifier with a
+# 1-channel binary one).
+# Use: python -m training.train model=segformer_b0
+architecture: segformer_b0
+encoder_name: b0
+encoder_weights: imagenet
+in_channels: 5
+classes: 1

@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader, Dataset
 from benchmarks.metrics import MetricSummary, compute_chip_metrics, summarize
 from data.contract import LABEL_IGNORE, LABEL_NON_WATER, LABEL_WATER, NUM_CHANNELS
 from models.losses import build_loss
-from models.unet import build_unet
+from models.build_model import build_model
 from training.checkpoint import find_latest_checkpoint, save_checkpoint, seed_everything
 from training.checkpoint import load_checkpoint as _load_checkpoint
 from training.config import TrainConfig
@@ -272,7 +272,7 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
     steps_per_epoch = len(dataloader)
     total_steps = cfg.epochs * steps_per_epoch
 
-    model = build_unet(
+    model = build_model(
         architecture=cfg.model.architecture,
         encoder_name=cfg.model.encoder_name,
         encoder_weights=cfg.model.encoder_weights,

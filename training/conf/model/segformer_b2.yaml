@@ -1,0 +1,9 @@
+# SegFormer-B2: the larger variant of the transformer comparison Phase 4
+# calls for (spec section 4.3). See segformer_b0.yaml for the rationale
+# and the 5-channel/binary-output adaptations (models/segformer.py).
+# Use: python -m training.train model=segformer_b2
+architecture: segformer_b2
+encoder_name: b2
+encoder_weights: imagenet
+in_channels: 5
+classes: 1

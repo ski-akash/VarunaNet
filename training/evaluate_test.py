@@ -22,7 +22,7 @@ import torch
 from omegaconf import DictConfig
 
 from benchmarks.metrics import MetricSummary, compute_chip_metrics, summarize
-from models.unet import build_unet
+from models.build_model import build_model
 from training.checkpoint import load_checkpoint
 from training.train import build_dataloader, resolve_device, run_validation
 
@@ -52,7 +52,7 @@ def _tta_probabilities(model: torch.nn.Module, inputs: torch.Tensor, amp_dtype, 
 def evaluate_test(cfg) -> MetricSummary:
     device = resolve_device(cfg.device)
 
-    model = build_unet(
+    model = build_model(
         architecture=cfg.model.architecture,
         encoder_name=cfg.model.encoder_name,
         encoder_weights=cfg.model.encoder_weights,

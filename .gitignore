@@ -24,3 +24,6 @@ datasets/
 # synced/uploaded separately, never committed.
 wandb/
 checkpoints/
+
+# Hydra's default per-run output directory.
+outputs/

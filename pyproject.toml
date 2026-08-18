@@ -23,6 +23,10 @@ dependencies = [
     "torch",
     "torchvision",
     "segmentation-models-pytorch",
+    # Phase 4 (architecture study, spec section 4.3): SegFormer is the
+    # transformer comparison against the CNN family above -- HuggingFace
+    # ships it pretrained, segmentation-models-pytorch doesn't.
+    "transformers",
     # Config-driven training loop (spec section 8). omegaconf comes in as
     # hydra-core's own dependency, not listed separately.
     "hydra-core",

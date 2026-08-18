@@ -13,7 +13,7 @@ import torch
 from omegaconf import DictConfig
 
 from benchmarks.metrics import compute_chip_metrics, summarize_per_event
-from models.unet import build_unet
+from models.build_model import build_model
 from training.checkpoint import load_checkpoint
 from training.train import build_dataloader, resolve_device
 
@@ -21,7 +21,7 @@ from training.train import build_dataloader, resolve_device
 def per_event_eval(cfg) -> dict:
     device = resolve_device(cfg.device)
 
-    model = build_unet(
+    model = build_model(
         architecture=cfg.model.architecture,
         encoder_name=cfg.model.encoder_name,
         encoder_weights=cfg.model.encoder_weights,
