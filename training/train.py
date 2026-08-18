@@ -135,6 +135,7 @@ def build_dataloader(
             # and test (called with an explicit split_csv_name) must stay
             # deterministic so scores are comparable run to run.
             augment=split_csv_name is None,
+            channel_indices=cfg.dataset.channel_indices,
         )
     elif cfg.dataset.name == "sen1floods11_weak":
         # Weak-label pretraining set (data/sen1floods11_weak.py) -- no

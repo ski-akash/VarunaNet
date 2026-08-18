@@ -88,6 +88,12 @@ class DatasetConfig:
     # training decision, defeating the point of holding it out.
     test_split_csv_name: str = "flood_test_data.csv"
     normalization_stats_path: str = "data/sen1floods11_normalization_stats.json"
+    # Channel ablation (spec section 3.2): None keeps all 5 (VV_db,
+    # VH_db, VV_VH_ratio, slope, HAND). Set to e.g. [0, 1] to train/eval
+    # on VV/VH alone, to measure whether the derived ratio/terrain
+    # channels are actually earning their place or just dead weight --
+    # must pair with model.in_channels set to match len(channel_indices).
+    channel_indices: Optional[list] = None
 
 
 @dataclass

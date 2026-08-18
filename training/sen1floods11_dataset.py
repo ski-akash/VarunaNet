@@ -66,12 +66,21 @@ class Sen1Floods11TorchDataset(Dataset):
         normalization_stats: NormalizationStats,
         terrain_cache: TerrainCache | None = None,
         augment: bool = False,
+        channel_indices: list[int] | None = None,
     ) -> None:
         self._dataset = Sen1Floods11Dataset(image_dir, label_dir, split_csv)
         self._dem_dir = Path(dem_dir)
         self._stats = normalization_stats
         self._terrain_cache = terrain_cache
         self._augment = augment
+        # Channel order is fixed: 0=VV_db, 1=VH_db, 2=VV_VH_ratio, 3=slope,
+        # 4=HAND (see __getitem__'s concatenation order). None keeps all
+        # 5 -- pass e.g. [0, 1] for a VV/VH-only ablation (spec section
+        # 3.2's "does adding VV_VH_ratio/slope/HAND actually help, or is
+        # it dead weight" question). Sliced *after* normalization, which
+        # is computed per-channel, so dropping channels doesn't change
+        # the normalization of the ones kept.
+        self._channel_indices = channel_indices
 
     def __len__(self) -> int:
         return len(self._dataset)
@@ -107,6 +116,13 @@ class Sen1Floods11TorchDataset(Dataset):
         image_tensor = torch.from_numpy(full)
         label_tensor = torch.from_numpy(sample.label)
 
+        # Sliced after validate_input_tensor, deliberately: a channel
+        # ablation is a modeling choice, not a data-contract violation --
+        # the full 5-channel tensor must still be valid before we decide
+        # to drop any of it.
+        if self._channel_indices is not None:
+            image_tensor = image_tensor[self._channel_indices]
+
         # Flips only (no rotation/crop): the terrain channels (slope,
         # HAND) and SAR channels all stay geometrically consistent under
         # a flip with no interpolation needed, unlike a rotation, which
@@ -129,6 +145,7 @@ def build_sen1floods11_dataset(
     normalization_stats: NormalizationStats,
     precompute_terrain: bool = True,
     augment: bool = False,
+    channel_indices: list[int] | None = None,
 ) -> Sen1Floods11TorchDataset:
     """
     Convenience constructor matching Sen1Floods11's on-disk layout (see
@@ -160,4 +177,5 @@ def build_sen1floods11_dataset(
         normalization_stats=normalization_stats,
         terrain_cache=terrain_cache,
         augment=augment,
+        channel_indices=channel_indices,
     )
