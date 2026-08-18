@@ -80,11 +80,24 @@ def fetch_dem_for_chip(
     return dem
 
 
-def fetch_dem_for_all_chips(s1_dir: str | Path, dest_dir: str | Path) -> None:
+def fetch_dem_for_all_chips(
+    s1_dir: str | Path,
+    dest_dir: str | Path,
+    s1_suffix: str = "_S1Hand.tif",
+    dem_suffix: str = "_DEMHand.tif",
+) -> None:
     """
-    Fetch and save a matching DEM chip for every *_S1Hand.tif file in
-    `s1_dir`, writing `<chip_id>_DEMHand.tif` into `dest_dir`. Skips chips
+    Fetch and save a matching DEM chip for every *{s1_suffix} file in
+    `s1_dir`, writing `<chip_id>{dem_suffix}` into `dest_dir`. Skips chips
     that already have a saved DEM file, so an interrupted run can resume.
+
+    s1_suffix/dem_suffix default to the HandLabeled convention; the
+    weakly-labeled subset (data/sen1floods11_weak.py) reuses this same
+    function with s1_suffix="_S1Weak.tif" but keeps dem_suffix at
+    "_DEMHand.tif" -- get_terrain/build_terrain_cache (data/chip_terrain.py)
+    hardcode that suffix regardless of which subset a chip came from, so
+    matching it here means both subsets work with the same terrain-cache
+    code unmodified.
     """
     s1_dir = Path(s1_dir)
     dest_dir = Path(dest_dir)
@@ -92,10 +105,10 @@ def fetch_dem_for_all_chips(s1_dir: str | Path, dest_dir: str | Path) -> None:
 
     tile_cache: dict[str, rasterio.DatasetReader] = {}
     try:
-        chip_paths = sorted(s1_dir.glob("*_S1Hand.tif"))
+        chip_paths = sorted(s1_dir.glob(f"*{s1_suffix}"))
         for i, chip_path in enumerate(chip_paths, start=1):
-            chip_id = chip_path.name.replace("_S1Hand.tif", "")
-            dest_path = dest_dir / f"{chip_id}_DEMHand.tif"
+            chip_id = chip_path.name.replace(s1_suffix, "")
+            dest_path = dest_dir / f"{chip_id}{dem_suffix}"
             if dest_path.exists():
                 continue
 

@@ -1,0 +1,16 @@
+# Weak-label pretraining set (spec section 3.1's "much larger weakly-
+# labeled set"): python -m training.train dataset=sen1floods11_weak
+#
+# 4,384 chips with Otsu-derived (not human-verified) water labels --
+# noisier than the hand-labeled set but ~10x larger, used to pretrain
+# the encoder+decoder before fine-tuning on the small hand-labeled set
+# (dataset=sen1floods11) via init_weights_from. Reuses the hand-labeled
+# set's normalization_stats_path deliberately: the model gets fine-tuned
+# on hand-labeled data afterward, so both phases need to normalize
+# inputs identically or the fine-tuning phase would face a distribution
+# shift on top of the label-source shift it's already handling.
+name: sen1floods11_weak
+batch_size: 8
+shuffle: true
+data_root: datasets/sen1floods11_weak
+normalization_stats_path: data/sen1floods11_normalization_stats.json

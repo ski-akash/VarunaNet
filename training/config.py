@@ -116,6 +116,12 @@ class TrainConfig:
     checkpoint_dir: str = "checkpoints"
     checkpoint_every_steps: int = 50
     resume_from: Optional[str] = None
+    # Distinct from resume_from: loads only model weights from a prior
+    # checkpoint (e.g. a weak-label pretraining run), leaving optimizer,
+    # scheduler, global_step, and RNG state fresh -- for starting a new
+    # fine-tuning run from pretrained weights, not resuming an
+    # interrupted one.
+    init_weights_from: Optional[str] = None
     # Spec section 4.2: "early stopping on val IoU". Validation runs every
     # validate_every_epochs epochs; training stops early if
     # early_stopping_patience validation checks in a row show no

@@ -136,6 +136,22 @@ def build_dataloader(
             # deterministic so scores are comparable run to run.
             augment=split_csv_name is None,
         )
+    elif cfg.dataset.name == "sen1floods11_weak":
+        # Weak-label pretraining set (data/sen1floods11_weak.py) -- no
+        # official split, so "train"/"val" here means the small held-out
+        # slice split_weak_chip_ids carves off, not a benchmark split.
+        # split_csv_name is unused for this dataset (kept as the shared
+        # build_dataloader parameter name for build_val_dataloader below).
+        from data.normalization import NormalizationStats
+        from training.sen1floods11_weak_dataset import build_sen1floods11_weak_dataset
+
+        stats = NormalizationStats.load(cfg.dataset.normalization_stats_path)
+        dataset = build_sen1floods11_weak_dataset(
+            data_root=cfg.dataset.data_root,
+            normalization_stats=stats,
+            split="train" if split_csv_name is None else "val",
+            augment=split_csv_name is None,
+        )
     else:
         raise NotImplementedError(
             f"dataset {cfg.dataset.name!r} isn't wired up yet -- 'synthetic' and "
