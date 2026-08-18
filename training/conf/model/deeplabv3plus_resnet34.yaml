@@ -1,0 +1,13 @@
+# DeepLabV3+ (Chen et al. 2018): a different segmentation paradigm from
+# U-Net/U-Net++'s encoder-decoder-with-skip-connections -- atrous (dilated)
+# convolutions in an ASPP module capture multi-scale context without
+# downsampling as aggressively, then a lightweight decoder refines
+# boundaries. Same ResNet-34 encoder, same 5-channel data contract, so
+# it's a clean architecture-only comparison (spec section 4.3's Phase 4
+# architecture study).
+# Use: python -m training.train model=deeplabv3plus_resnet34
+architecture: deeplabv3plus
+encoder_name: resnet34
+encoder_weights: imagenet
+in_channels: 5
+classes: 1

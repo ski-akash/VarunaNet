@@ -43,6 +43,7 @@ NUM_OUTPUT_CLASSES = 1
 _ARCHITECTURES = {
     "unet": smp.Unet,
     "unetplusplus": smp.UnetPlusPlus,
+    "deeplabv3plus": smp.DeepLabV3Plus,
 }
 
 
