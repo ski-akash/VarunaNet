@@ -33,6 +33,7 @@ import random
 from pathlib import Path
 
 import numpy as np
+import rasterio
 import torch
 from torch.utils.data import Dataset
 
@@ -40,6 +41,20 @@ from data.chip_terrain import TerrainCache, build_terrain_cache, get_terrain
 from data.contract import validate_input_tensor, validate_label_tensor
 from data.normalization import NormalizationStats, apply_normalization
 from data.sen1floods11 import Sen1Floods11Dataset
+
+
+def _load_jrc_permanent_water(path: Path) -> np.ndarray:
+    """
+    Reads a *_JRCWaterHand.tif chip: 1 band, uint8, already binary (0 =
+    not permanent water, 1 = permanent water -- confirmed directly by
+    scanning the downloaded chips, not assumed). Left unnormalized: this
+    channel is a baseline/change-detection signal for
+    models/change_aware_unet.py, not a SAR measurement, so the
+    normalization stats computed for the 5 SAR/terrain channels don't
+    apply to it.
+    """
+    with rasterio.open(path) as src:
+        return src.read(1).astype(np.float32)
 
 
 class Sen1Floods11TorchDataset(Dataset):
@@ -67,12 +82,19 @@ class Sen1Floods11TorchDataset(Dataset):
         terrain_cache: TerrainCache | None = None,
         augment: bool = False,
         channel_indices: list[int] | None = None,
+        jrc_dir: str | Path | None = None,
     ) -> None:
         self._dataset = Sen1Floods11Dataset(image_dir, label_dir, split_csv)
         self._dem_dir = Path(dem_dir)
         self._stats = normalization_stats
         self._terrain_cache = terrain_cache
         self._augment = augment
+        # When set, __getitem__ appends the JRC permanent-water mask as a
+        # 6th channel (index 5), raw/unnormalized, for
+        # models/change_aware_unet.py's baseline branch -- see
+        # _load_jrc_permanent_water. None (default) keeps the standard
+        # 5-channel contract every other model expects.
+        self._jrc_dir = Path(jrc_dir) if jrc_dir is not None else None
         # Channel order is fixed: 0=VV_db, 1=VH_db, 2=VV_VH_ratio, 3=slope,
         # 4=HAND (see __getitem__'s concatenation order). None keeps all
         # 5 -- pass e.g. [0, 1] for a VV/VH-only ablation (spec section
@@ -123,6 +145,11 @@ class Sen1Floods11TorchDataset(Dataset):
         if self._channel_indices is not None:
             image_tensor = image_tensor[self._channel_indices]
 
+        if self._jrc_dir is not None:
+            jrc = _load_jrc_permanent_water(self._jrc_dir / f"{sample.chip_id}_JRCWaterHand.tif")
+            jrc_tensor = torch.from_numpy(jrc).unsqueeze(0)  # [1, H, W]
+            image_tensor = torch.cat([image_tensor, jrc_tensor], dim=0)
+
         # Flips only (no rotation/crop): the terrain channels (slope,
         # HAND) and SAR channels all stay geometrically consistent under
         # a flip with no interpolation needed, unlike a rotation, which
@@ -146,6 +173,7 @@ def build_sen1floods11_dataset(
     precompute_terrain: bool = True,
     augment: bool = False,
     channel_indices: list[int] | None = None,
+    include_jrc_baseline: bool = False,
 ) -> Sen1Floods11TorchDataset:
     """
     Convenience constructor matching Sen1Floods11's on-disk layout (see
@@ -178,4 +206,5 @@ def build_sen1floods11_dataset(
         terrain_cache=terrain_cache,
         augment=augment,
         channel_indices=channel_indices,
+        jrc_dir=(data_root / "JRCWaterHand") if include_jrc_baseline else None,
     )

@@ -1,0 +1,14 @@
+# ChangeAwareUNet (models/change_aware_unet.py) -- spec section 4.4's
+# "stretch modeling work": a two-stream architecture that fuses the
+# standard 5-channel SAR/terrain input with the JRC permanent-water
+# baseline at every decoder skip level, so the model learns "is this
+# newly wet" rather than absolute backscatter alone.
+#
+# Must be paired with dataset=sen1floods11_change_aware (adds the JRC
+# channel, in_channels=6 total: 5 SAR/terrain + 1 baseline).
+# Use: python -m training.train model=change_aware_unet dataset=sen1floods11_change_aware
+architecture: change_aware_unet
+encoder_name: resnet34
+encoder_weights: imagenet
+in_channels: 6
+classes: 1

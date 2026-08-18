@@ -1,0 +1,14 @@
+# Same as dataset=sen1floods11, but appends the JRC permanent-water mask
+# as a 6th channel for model=change_aware_unet's baseline branch (see
+# training/sen1floods11_dataset.py's include_jrc_baseline and
+# models/change_aware_unet.py).
+name: sen1floods11
+batch_size: 8
+shuffle: true
+data_root: datasets/sen1floods11
+split_csv_name: flood_train_data.csv
+val_split_csv_name: flood_valid_data.csv
+test_split_csv_name: flood_test_data.csv
+normalization_stats_path: data/sen1floods11_normalization_stats.json
+channel_indices: null
+include_jrc_baseline: true

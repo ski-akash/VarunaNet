@@ -4,7 +4,8 @@ Single entry point for building any of this project's architectures
 (training/train.py, training/evaluate_test.py, training/per_event_eval.py)
 picks a model the same way regardless of which family it comes from --
 segmentation_models_pytorch (U-Net, U-Net++, DeepLabV3+; see
-models/unet.py) or HuggingFace's SegFormer (models/segformer.py).
+models/unet.py), HuggingFace's SegFormer (models/segformer.py), or this
+project's own two-stream ChangeAwareUNet (models/change_aware_unet.py).
 
 Kept separate from models/unet.py itself so that module's docstring
 ("we don't hand-roll U-Net... same architecture family... all through
@@ -14,6 +15,7 @@ not SegFormer's fundamentally different transformer/HF interface.
 
 from torch import nn
 
+from models.change_aware_unet import build_change_aware_unet
 from models.segformer import build_segformer
 from models.unet import _ARCHITECTURES, build_unet
 
@@ -42,7 +44,13 @@ def build_model(
             in_channels=in_channels,
             classes=classes,
         )
+    if architecture == "change_aware_unet":
+        return build_change_aware_unet(
+            encoder_weights=encoder_weights,
+            in_channels=in_channels,
+            classes=classes,
+        )
     raise ValueError(
         f"architecture {architecture!r} isn't wired up yet -- expected one of "
-        f"{sorted(_ARCHITECTURES) + sorted(_SEGFORMER_VARIANTS)}"
+        f"{sorted(_ARCHITECTURES) + sorted(_SEGFORMER_VARIANTS) + ['change_aware_unet']}"
     )

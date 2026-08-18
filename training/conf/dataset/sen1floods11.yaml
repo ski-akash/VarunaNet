@@ -24,3 +24,4 @@ normalization_stats_path: data/sen1floods11_normalization_stats.json
 # merge against TrainConfig -- evaluate_test.py, per_event_eval.py --
 # would otherwise hit a struct-mode ConfigAttributeError on this key.
 channel_indices: null
+include_jrc_baseline: false

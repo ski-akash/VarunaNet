@@ -94,6 +94,11 @@ class DatasetConfig:
     # channels are actually earning their place or just dead weight --
     # must pair with model.in_channels set to match len(channel_indices).
     channel_indices: Optional[list] = None
+    # models/change_aware_unet.py's baseline branch (spec section 4.4's
+    # "learn change, not absolute backscatter" stretch goal): appends
+    # the JRC permanent-water mask as a 6th channel. See
+    # training/conf/dataset/sen1floods11_change_aware.yaml.
+    include_jrc_baseline: bool = False
 
 
 @dataclass

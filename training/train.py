@@ -136,6 +136,7 @@ def build_dataloader(
             # deterministic so scores are comparable run to run.
             augment=split_csv_name is None,
             channel_indices=cfg.dataset.channel_indices,
+            include_jrc_baseline=cfg.dataset.include_jrc_baseline,
         )
     elif cfg.dataset.name == "sen1floods11_weak":
         # Weak-label pretraining set (data/sen1floods11_weak.py) -- no
