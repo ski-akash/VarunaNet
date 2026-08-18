@@ -17,6 +17,9 @@ datasets/
 # Local tool config/permissions -- machine-specific, never belongs in git.
 .claude/
 
+# macOS Finder metadata.
+.DS_Store
+
 # W&B offline run data and training checkpoints -- local artifacts,
 # synced/uploaded separately, never committed.
 wandb/
