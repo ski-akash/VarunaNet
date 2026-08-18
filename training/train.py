@@ -353,6 +353,11 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
             epoch = global_step // steps_per_epoch
             if epoch % cfg.validate_every_epochs == 0:
                 val_summary = run_validation(model, val_dataloader, device, amp_dtype, use_amp)
+                print(
+                    f"epoch {epoch} step {global_step} loss={last_loss:.4f} "
+                    f"val_mean_iou={val_summary.mean_iou:.4f} lr={scheduler.get_last_lr()[0]:.2e}",
+                    flush=True,
+                )
                 wandb.log(
                     {
                         "val/mean_iou": val_summary.mean_iou,
