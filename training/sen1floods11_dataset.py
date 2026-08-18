@@ -29,6 +29,7 @@ solved the same way, for the same reason (most chips get read many times
 over across its 11 folds).
 """
 
+import random
 from pathlib import Path
 
 import numpy as np
@@ -64,11 +65,13 @@ class Sen1Floods11TorchDataset(Dataset):
         split_csv: str | Path,
         normalization_stats: NormalizationStats,
         terrain_cache: TerrainCache | None = None,
+        augment: bool = False,
     ) -> None:
         self._dataset = Sen1Floods11Dataset(image_dir, label_dir, split_csv)
         self._dem_dir = Path(dem_dir)
         self._stats = normalization_stats
         self._terrain_cache = terrain_cache
+        self._augment = augment
 
     def __len__(self) -> int:
         return len(self._dataset)
@@ -101,7 +104,23 @@ class Sen1Floods11TorchDataset(Dataset):
         validate_input_tensor(full)
         validate_label_tensor(sample.label)
 
-        return torch.from_numpy(full), torch.from_numpy(sample.label), sample.chip_id
+        image_tensor = torch.from_numpy(full)
+        label_tensor = torch.from_numpy(sample.label)
+
+        # Flips only (no rotation/crop): the terrain channels (slope,
+        # HAND) and SAR channels all stay geometrically consistent under
+        # a flip with no interpolation needed, unlike a rotation, which
+        # would require resampling and could reintroduce NaN-adjacent
+        # artifacts near the label's ignore borders.
+        if self._augment:
+            if random.random() < 0.5:
+                image_tensor = torch.flip(image_tensor, dims=[-1])
+                label_tensor = torch.flip(label_tensor, dims=[-1])
+            if random.random() < 0.5:
+                image_tensor = torch.flip(image_tensor, dims=[-2])
+                label_tensor = torch.flip(label_tensor, dims=[-2])
+
+        return image_tensor, label_tensor, sample.chip_id
 
 
 def build_sen1floods11_dataset(
@@ -109,6 +128,7 @@ def build_sen1floods11_dataset(
     split_csv_name: str,
     normalization_stats: NormalizationStats,
     precompute_terrain: bool = True,
+    augment: bool = False,
 ) -> Sen1Floods11TorchDataset:
     """
     Convenience constructor matching Sen1Floods11's on-disk layout (see
@@ -139,4 +159,5 @@ def build_sen1floods11_dataset(
         split_csv=split_csv,
         normalization_stats=normalization_stats,
         terrain_cache=terrain_cache,
+        augment=augment,
     )

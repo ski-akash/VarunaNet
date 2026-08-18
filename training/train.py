@@ -131,6 +131,10 @@ def build_dataloader(
                 split_csv_name if split_csv_name is not None else cfg.dataset.split_csv_name
             ),
             normalization_stats=stats,
+            # Only the training split gets flip augmentation -- validation
+            # and test (called with an explicit split_csv_name) must stay
+            # deterministic so scores are comparable run to run.
+            augment=split_csv_name is None,
         )
     else:
         raise NotImplementedError(
