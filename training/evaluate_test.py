@@ -14,22 +14,46 @@ so "beats baseline" is a real apples-to-apples comparison.
 
 Run directly:
     python -m training.evaluate_test checkpoint=checkpoints/best.pt
+    python -m training.evaluate_test checkpoint=checkpoints/best.pt tta=true
 """
 
 import hydra
 import torch
 from omegaconf import DictConfig
 
-from benchmarks.metrics import MetricSummary
+from benchmarks.metrics import MetricSummary, compute_chip_metrics, summarize
 from models.unet import build_unet
 from training.checkpoint import load_checkpoint
 from training.train import build_dataloader, resolve_device, run_validation
+
+
+def _tta_probabilities(model: torch.nn.Module, inputs: torch.Tensor, amp_dtype, use_amp, device):
+    """
+    Averages sigmoid probabilities across the horizontal flip, vertical
+    flip, and both-flip variants of the input plus the original -- the
+    same 4-way flip TTA a 2026 benchmark paper on this exact dataset
+    reported a consistent +0.01-0.02 IoU gain from, across every
+    architecture it tested (U-Net, U-Net++, DeepLabV3, SegFormer). Each
+    flipped prediction is flipped back to the original orientation
+    before averaging, so all four line up pixel-for-pixel.
+    """
+    flip_specs = [(), (-1,), (-2,), (-1, -2)]
+    total = None
+    for dims in flip_specs:
+        flipped_input = torch.flip(inputs, dims=dims) if dims else inputs
+        with torch.autocast(device_type=device, dtype=amp_dtype, enabled=use_amp):
+            logits = model(flipped_input)
+        probs = torch.sigmoid(logits)
+        probs = torch.flip(probs, dims=dims) if dims else probs
+        total = probs if total is None else total + probs
+    return total / len(flip_specs)
 
 
 def evaluate_test(cfg) -> MetricSummary:
     device = resolve_device(cfg.device)
 
     model = build_unet(
+        architecture=cfg.model.architecture,
         encoder_name=cfg.model.encoder_name,
         encoder_weights=cfg.model.encoder_weights,
         in_channels=cfg.model.in_channels,
@@ -44,14 +68,30 @@ def evaluate_test(cfg) -> MetricSummary:
     use_amp = device == "cuda" and cfg.amp_dtype in ("fp16", "bf16")
     amp_dtype = torch.float16 if cfg.amp_dtype == "fp16" else torch.bfloat16
 
-    return run_validation(model, test_dataloader, device, amp_dtype, use_amp)
+    if not getattr(cfg, "tta", False):
+        return run_validation(model, test_dataloader, device, amp_dtype, use_amp)
+
+    model.eval()
+    chip_metrics = []
+    with torch.no_grad():
+        for inputs, targets, chip_ids in test_dataloader:
+            inputs = inputs.to(device)
+            probs = _tta_probabilities(model, inputs, amp_dtype, use_amp, device)
+            predicted_water = (probs > 0.5).squeeze(1).cpu().numpy()
+            targets_np = targets.numpy()
+            for i, chip_id in enumerate(chip_ids):
+                chip_metrics.append(
+                    compute_chip_metrics(chip_id, predicted_water[i], targets_np[i])
+                )
+    return summarize(chip_metrics)
 
 
 @hydra.main(config_path="conf", config_name="evaluate_test", version_base=None)
 def main(cfg: DictConfig) -> None:
     summary = evaluate_test(cfg)
+    tag = "tta" if getattr(cfg, "tta", False) else "no-tta"
     print(
-        f"test split ({cfg.checkpoint}): "
+        f"test split [{tag}] ({cfg.checkpoint}): "
         f"mean_iou={summary.mean_iou:.4f} median_iou={summary.median_iou:.4f} "
         f"mean_f1={summary.mean_f1:.4f} mean_precision={summary.mean_precision:.4f} "
         f"mean_recall={summary.mean_recall:.4f}"

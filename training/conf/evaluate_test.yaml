@@ -21,3 +21,7 @@ defaults:
 checkpoint: ???
 device: auto
 amp_dtype: fp32
+# 4-way flip test-time augmentation (see evaluate_test.py's
+# _tta_probabilities) -- averages predictions over the original plus
+# horizontal/vertical/both-flipped inputs before thresholding.
+tta: false
