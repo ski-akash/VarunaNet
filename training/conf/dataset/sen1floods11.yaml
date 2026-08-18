@@ -18,3 +18,9 @@ split_csv_name: flood_train_data.csv
 val_split_csv_name: flood_valid_data.csv
 test_split_csv_name: flood_test_data.csv
 normalization_stats_path: data/sen1floods11_normalization_stats.json
+# None keeps all 5 channels -- see training/conf/dataset/sen1floods11_vvvh_only.yaml
+# for the ablation that overrides this. Present here explicitly (not only
+# as a TrainConfig dataclass default) because entry points that don't
+# merge against TrainConfig -- evaluate_test.py, per_event_eval.py --
+# would otherwise hit a struct-mode ConfigAttributeError on this key.
+channel_indices: null
