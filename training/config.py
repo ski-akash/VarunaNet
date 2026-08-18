@@ -19,6 +19,8 @@ from data.contract import NUM_CHANNELS
 
 @dataclass
 class ModelConfig:
+    # "unet" or "unetplusplus" -- see models/unet.py's build_unet.
+    architecture: str = "unet"
     encoder_name: str = "resnet34"
     encoder_weights: Optional[str] = "imagenet"
     in_channels: int = NUM_CHANNELS

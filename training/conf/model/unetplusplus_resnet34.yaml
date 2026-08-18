@@ -1,0 +1,12 @@
+# U-Net++ (Zhou et al. 2018): same ResNet-34 encoder as the primary
+# unet_resnet34 config, but with nested, densely-connected skip
+# pathways between encoder and decoder stages instead of U-Net's single
+# skip connection per resolution -- meant to narrow the semantic gap
+# between encoder and decoder feature maps, which can matter for the
+# thin, irregular flood boundaries this task cares about.
+# Use: python -m training.train model=unetplusplus_resnet34
+architecture: unetplusplus
+encoder_name: resnet34
+encoder_weights: imagenet
+in_channels: 5
+classes: 1

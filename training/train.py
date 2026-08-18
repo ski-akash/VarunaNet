@@ -272,11 +272,20 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
     total_steps = cfg.epochs * steps_per_epoch
 
     model = build_unet(
+        architecture=cfg.model.architecture,
         encoder_name=cfg.model.encoder_name,
         encoder_weights=cfg.model.encoder_weights,
         in_channels=cfg.model.in_channels,
         classes=cfg.model.classes,
     ).to(device)
+
+    if cfg.init_weights_from is not None:
+        # weights_only=False: same trusted-checkpoint reasoning as
+        # load_checkpoint below -- this file is our own prior run's
+        # output, not an untrusted source.
+        pretrained = torch.load(cfg.init_weights_from, map_location=device, weights_only=False)
+        model.load_state_dict(pretrained["model_state_dict"])
+
     loss_fn = build_loss(cfg.loss.name, **_loss_kwargs(cfg.loss))
     optimizer, scheduler = build_optimizer_and_scheduler(cfg, model, total_steps)
 

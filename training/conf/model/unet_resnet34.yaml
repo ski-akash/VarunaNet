@@ -4,6 +4,7 @@
 # study can add sibling files here (e.g. a deeper encoder, or later a
 # DeepLabV3+/SegFormer config) and switch between them with
 # `model=<name>` on the command line, without touching this one.
+architecture: unet
 encoder_name: resnet34
 encoder_weights: imagenet
 in_channels: 5

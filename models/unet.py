@@ -40,21 +40,30 @@ from data.contract import NUM_CHANNELS
 NUM_OUTPUT_CLASSES = 1
 
 
+_ARCHITECTURES = {
+    "unet": smp.Unet,
+    "unetplusplus": smp.UnetPlusPlus,
+}
+
+
 def build_unet(
+    architecture: str = "unet",
     encoder_name: str = "resnet34",
     encoder_weights: str | None = "imagenet",
     in_channels: int = NUM_CHANNELS,
     classes: int = NUM_OUTPUT_CLASSES,
 ) -> nn.Module:
     """
-    Build the primary model: U-Net with the given encoder (default
-    ResNet-34, per spec section 4.1).
+    Build the primary model: U-Net (or, per Phase 4's architecture study,
+    U-Net++) with the given encoder (default ResNet-34, per spec section
+    4.1).
 
     Arguments are exposed rather than hardcoded so this same function
-    covers Phase 4's architecture study later -- e.g. swapping
-    encoder_name to try a deeper/shallower backbone, or setting
-    encoder_weights=None to compare against training from scratch --
-    without touching this file again.
+    covers the architecture study -- e.g. swapping encoder_name to try a
+    deeper/shallower backbone, setting encoder_weights=None to compare
+    against training from scratch, or architecture="unetplusplus" to
+    compare against U-Net's nested skip connections -- without touching
+    this file again.
 
     Returns a plain nn.Module that maps an input tensor of shape
     [B, in_channels, H, W] to an output tensor of shape [B, classes, H, W]
@@ -62,9 +71,17 @@ def build_unet(
     a ResNet encoder downsamples 5 times (2^5 = 32), and the decoder
     upsamples back by the same factor at each stage, so any input size
     not evenly divisible by that would leave the encoder and decoder
-    output resolutions mismatched at the final skip connection.
+    output resolutions mismatched at the final skip connection. Both
+    architectures share this constraint -- U-Net++'s extra nested skip
+    connections don't change the encoder/decoder downsampling factor.
     """
-    return smp.Unet(
+    if architecture not in _ARCHITECTURES:
+        raise ValueError(
+            f"architecture {architecture!r} isn't wired up yet -- expected one of "
+            f"{sorted(_ARCHITECTURES)}"
+        )
+    model_cls = _ARCHITECTURES[architecture]
+    return model_cls(
         encoder_name=encoder_name,
         encoder_weights=encoder_weights,
         in_channels=in_channels,
