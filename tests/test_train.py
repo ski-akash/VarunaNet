@@ -82,6 +82,24 @@ def test_command_line_style_overrides_apply():
     assert cfg.optimizer.lr == 3e-4
 
 
+def test_change_aware_unet_config_group_pairing_composes():
+    # This exact pairing (model=change_aware_unet dataset=sen1floods11_change_aware)
+    # is what training/train_change_aware_p100.sh submits to the cluster --
+    # confirm it actually resolves to a matching in_channels=6 on both sides
+    # (model.in_channels and the JRC-baseline-appending dataset flag)
+    # before that job ever runs unattended on a GPU.
+    with initialize(config_path="../training/conf", version_base=None):
+        raw_cfg = compose(
+            config_name="config",
+            overrides=["model=change_aware_unet", "dataset=sen1floods11_change_aware"],
+        )
+    cfg = OmegaConf.merge(OmegaConf.structured(TrainConfig), raw_cfg)
+
+    assert cfg.model.architecture == "change_aware_unet"
+    assert cfg.model.in_channels == 6
+    assert cfg.dataset.include_jrc_baseline is True
+
+
 def test_unknown_dataset_name_raises_not_implemented(tmp_path):
     cfg = _tiny_cfg(tmp_path)
     cfg.dataset.name = "not_a_real_dataset"
