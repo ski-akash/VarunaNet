@@ -1,0 +1,19 @@
+# Per-feature leave-one-out ablation (spec section 3.2, extending the
+# VV/VH-only ablation in sen1floods11_vvvh_only.yaml to individual
+# channels): identical to dataset=sen1floods11 but drops HAND
+# (data/contract.py's CHANNELS index 4) only, keeping VV_db, VH_db,
+# VV_VH_ratio, slope -- answers "does HAND specifically earn its keep,
+# given the spec calls it out as the single most effective auxiliary
+# feature for SAR flood mapping?" Must be paired with model.in_channels=4,
+# e.g.:
+#   python -m training.train dataset=sen1floods11_no_hand model.in_channels=4
+name: sen1floods11
+batch_size: 8
+shuffle: true
+data_root: datasets/sen1floods11
+split_csv_name: flood_train_data.csv
+val_split_csv_name: flood_valid_data.csv
+test_split_csv_name: flood_test_data.csv
+normalization_stats_path: data/sen1floods11_normalization_stats.json
+channel_indices: [0, 1, 2, 3]
+include_jrc_baseline: false

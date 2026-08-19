@@ -187,6 +187,37 @@ def test_terrain_cache_is_used_instead_of_recomputing(fixture_root):
     assert inputs[4, 0, 0].item() == 888.0
 
 
+def test_channel_indices_slices_after_normalization_in_requested_order(fixture_root):
+    # Regression test for the channel_indices ablation knob (spec section
+    # 3.2 / training/conf/dataset/sen1floods11_vvvh_only.yaml and the
+    # per-feature leave-one-out configs) -- nothing exercised this before,
+    # even though real cluster training runs already depend on it.
+    # channel_indices=[0, 1, 3, 4] drops index 2 (VV_VH_ratio), keeping
+    # VV, VH, slope, HAND in that order -- confirmed here via the same
+    # fake-terrain-cache trick test_terrain_cache_is_used_instead_of_recomputing
+    # uses, so slope/HAND are identifiable by value at their new positions.
+    fake_slope = np.full((CHIP_SIZE, CHIP_SIZE), 999.0, dtype=np.float32)
+    fake_hand = np.full((CHIP_SIZE, CHIP_SIZE), 888.0, dtype=np.float32)
+    terrain_cache = {"Bolivia_1": (fake_slope, fake_hand)}
+
+    split_csv = fixture_root / "splits" / "flood_train_data.csv"
+    dataset = Sen1Floods11TorchDataset(
+        image_dir=fixture_root / "S1Hand",
+        label_dir=fixture_root / "LabelHand",
+        dem_dir=fixture_root / "DEMHand",
+        split_csv=split_csv,
+        normalization_stats=_FLAT_STATS,
+        terrain_cache=terrain_cache,
+        channel_indices=[0, 1, 3, 4],
+    )
+
+    inputs, _, _ = dataset[0]
+
+    assert inputs.shape == (4, CHIP_SIZE, CHIP_SIZE)
+    assert inputs[2, 0, 0].item() == 999.0  # slope, now at position 2
+    assert inputs[3, 0, 0].item() == 888.0  # HAND, now at position 3
+
+
 def test_normalization_is_actually_applied(fixture_root):
     # Bolivia_1's raw VV is a constant -12.0 dB. With non-trivial stats
     # (not the identity _FLAT_STATS), the returned tensor should reflect
