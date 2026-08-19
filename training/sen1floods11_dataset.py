@@ -41,6 +41,7 @@ from data.chip_terrain import TerrainCache, build_terrain_cache, get_terrain
 from data.contract import validate_input_tensor, validate_label_tensor
 from data.normalization import NormalizationStats, apply_normalization
 from data.sen1floods11 import Sen1Floods11Dataset
+from data.speckle import apply_speckle_noise
 
 
 def _load_jrc_permanent_water(path: Path) -> np.ndarray:
@@ -83,12 +84,20 @@ class Sen1Floods11TorchDataset(Dataset):
         augment: bool = False,
         channel_indices: list[int] | None = None,
         jrc_dir: str | Path | None = None,
+        speckle_prob: float = 0.0,
+        speckle_looks: float = 4.0,
     ) -> None:
         self._dataset = Sen1Floods11Dataset(image_dir, label_dir, split_csv)
         self._dem_dir = Path(dem_dir)
         self._stats = normalization_stats
         self._terrain_cache = terrain_cache
         self._augment = augment
+        # Speckle-noise augmentation (spec section 4.2), gated separately
+        # from self._augment's flip logic so the two can be swept
+        # independently -- speckle_prob=0.0 (default) is a strict no-op,
+        # identical to this dataset's behavior before this knob existed.
+        self._speckle_prob = speckle_prob
+        self._speckle_looks = speckle_looks
         # When set, __getitem__ appends the JRC permanent-water mask as a
         # 6th channel (index 5), raw/unnormalized, for
         # models/change_aware_unet.py's baseline branch -- see
@@ -112,6 +121,23 @@ class Sen1Floods11TorchDataset(Dataset):
         slope, hand = get_terrain(sample.chip_id, self._dem_dir, self._terrain_cache)
 
         full = np.concatenate([sample.image, slope[np.newaxis], hand[np.newaxis]], axis=0)
+
+        # Applied here, before normalization, deliberately: the speckle
+        # model operates on real dB backscatter values (data/speckle.py
+        # converts to linear power internally), not on already
+        # normalization-scaled ones, which have no physical meaning to
+        # multiply against a noise model. Only VV_db (0) and VH_db (1)
+        # are radar measurements -- slope/HAND are terrain, untouched.
+        # VV_VH_ratio (2) is recomputed from the now-noisy VV/VH using
+        # data/sen1floods11.py's own formula, so it stays internally
+        # consistent with the channels it's derived from -- otherwise the
+        # model would see a ratio channel computed from clean data
+        # sitting next to VV/VH channels that no longer match it.
+        if self._augment and self._speckle_prob > 0 and random.random() < self._speckle_prob:
+            full[0] = apply_speckle_noise(full[0], self._speckle_looks)
+            full[1] = apply_speckle_noise(full[1], self._speckle_looks)
+            full[2] = full[0] / np.where(full[1] == 0, 1e-6, full[1])
+
         full = apply_normalization(full, self._stats)
 
         # Real chips carry NaN by design, not as a rare edge case -- every
@@ -174,6 +200,8 @@ def build_sen1floods11_dataset(
     augment: bool = False,
     channel_indices: list[int] | None = None,
     include_jrc_baseline: bool = False,
+    speckle_prob: float = 0.0,
+    speckle_looks: float = 4.0,
 ) -> Sen1Floods11TorchDataset:
     """
     Convenience constructor matching Sen1Floods11's on-disk layout (see
@@ -207,4 +235,6 @@ def build_sen1floods11_dataset(
         augment=augment,
         channel_indices=channel_indices,
         jrc_dir=(data_root / "JRCWaterHand") if include_jrc_baseline else None,
+        speckle_prob=speckle_prob,
+        speckle_looks=speckle_looks,
     )

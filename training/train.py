@@ -137,6 +137,8 @@ def build_dataloader(
             augment=split_csv_name is None,
             channel_indices=cfg.dataset.channel_indices,
             include_jrc_baseline=cfg.dataset.include_jrc_baseline,
+            speckle_prob=cfg.dataset.speckle_prob,
+            speckle_looks=cfg.dataset.speckle_looks,
         )
     elif cfg.dataset.name == "sen1floods11_weak":
         # Weak-label pretraining set (data/sen1floods11_weak.py) -- no

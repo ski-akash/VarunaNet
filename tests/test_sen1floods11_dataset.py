@@ -218,6 +218,91 @@ def test_channel_indices_slices_after_normalization_in_requested_order(fixture_r
     assert inputs[3, 0, 0].item() == 888.0  # HAND, now at position 3
 
 
+def test_speckle_prob_zero_never_calls_the_noise_function(fixture_root, monkeypatch):
+    # Default speckle_prob=0.0 must be a strict no-op -- confirmed here
+    # by proving the speckle code path is never even entered (not just
+    # "the output happened to look the same"), regardless of augment or
+    # what random.random() would return, so every existing caller/config
+    # written before this knob existed keeps behaving identically.
+    import training.sen1floods11_dataset as dataset_module
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("apply_speckle_noise should never be called when speckle_prob=0.0")
+
+    monkeypatch.setattr(dataset_module, "apply_speckle_noise", _boom)
+    monkeypatch.setattr("random.random", lambda: 0.0)  # would pass any prob > 0 check
+
+    split_csv = fixture_root / "splits" / "flood_train_data.csv"
+    dataset = Sen1Floods11TorchDataset(
+        image_dir=fixture_root / "S1Hand",
+        label_dir=fixture_root / "LabelHand",
+        dem_dir=fixture_root / "DEMHand",
+        split_csv=split_csv,
+        normalization_stats=_FLAT_STATS,
+        augment=True,
+        speckle_prob=0.0,
+    )
+
+    dataset[0]  # must not raise
+
+
+def test_speckle_never_applies_when_augment_is_false(fixture_root, monkeypatch):
+    # speckle_prob=1.0 with augment=False must never perturb the data --
+    # val/test loading always passes augment=False and has to stay
+    # deterministic regardless of speckle_prob. Proven the same way as
+    # the speckle_prob=0.0 no-op test: the noise function must never even
+    # be called, not just "the output happened to look unaffected."
+    import training.sen1floods11_dataset as dataset_module
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("apply_speckle_noise should never be called when augment=False")
+
+    monkeypatch.setattr(dataset_module, "apply_speckle_noise", _boom)
+    monkeypatch.setattr("random.random", lambda: 0.0)  # would pass any prob > 0 check
+
+    split_csv = fixture_root / "splits" / "flood_train_data.csv"
+    dataset = Sen1Floods11TorchDataset(
+        image_dir=fixture_root / "S1Hand",
+        label_dir=fixture_root / "LabelHand",
+        dem_dir=fixture_root / "DEMHand",
+        split_csv=split_csv,
+        normalization_stats=_FLAT_STATS,
+        augment=False,
+        speckle_prob=1.0,
+        speckle_looks=4.0,
+    )
+
+    dataset[0]  # must not raise
+
+
+def test_speckle_recomputes_ratio_channel_consistently(fixture_root, monkeypatch):
+    # Regression test for the exact bug this augmentation could
+    # introduce: if VV/VH get perturbed but the ratio channel (index 2)
+    # doesn't get recomputed, the model sees a ratio that no longer
+    # matches the VV/VH it's supposedly derived from.
+    monkeypatch.setattr("random.random", lambda: 0.0)  # always pass the speckle_prob check
+    split_csv = fixture_root / "splits" / "flood_train_data.csv"
+    dataset = Sen1Floods11TorchDataset(
+        image_dir=fixture_root / "S1Hand",
+        label_dir=fixture_root / "LabelHand",
+        dem_dir=fixture_root / "DEMHand",
+        split_csv=split_csv,
+        normalization_stats=_FLAT_STATS,  # identity normalization -- raw dB values pass through
+        augment=True,
+        speckle_prob=1.0,
+        speckle_looks=4.0,
+    )
+
+    inputs, _, _ = dataset[0]
+
+    # _FLAT_STATS is identity (mean=0, std=1), so channels 0/1 here are
+    # the actual post-speckle VV_db/VH_db -- recompute the ratio the same
+    # way data/sen1floods11.py does and confirm channel 2 matches.
+    vv, vh = inputs[0], inputs[1]
+    expected_ratio = vv / torch.where(vh == 0, torch.full_like(vh, 1e-6), vh)
+    assert torch.allclose(inputs[2], expected_ratio, atol=1e-4)
+
+
 def test_normalization_is_actually_applied(fixture_root):
     # Bolivia_1's raw VV is a constant -12.0 dB. With non-trivial stats
     # (not the identity _FLAT_STATS), the returned tensor should reflect

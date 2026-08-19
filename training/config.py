@@ -99,6 +99,13 @@ class DatasetConfig:
     # the JRC permanent-water mask as a 6th channel. See
     # training/conf/dataset/sen1floods11_change_aware.yaml.
     include_jrc_baseline: bool = False
+    # Speckle-noise augmentation (spec section 4.2, data/speckle.py).
+    # speckle_prob is the per-sample chance it's applied on the training
+    # split (0.0 default is a strict no-op); speckle_looks controls noise
+    # strength (lower = noisier). Only takes effect together with
+    # augment=True, i.e. never on val/test.
+    speckle_prob: float = 0.0
+    speckle_looks: float = 4.0
 
 
 @dataclass

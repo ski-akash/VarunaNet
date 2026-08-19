@@ -25,3 +25,9 @@ normalization_stats_path: data/sen1floods11_normalization_stats.json
 # would otherwise hit a struct-mode ConfigAttributeError on this key.
 channel_indices: null
 include_jrc_baseline: false
+# Speckle-noise augmentation (spec section 4.2, data/speckle.py). 0.0
+# is a no-op -- matches this dataset's behavior before the knob existed.
+# Present explicitly for the same struct-mode reason as the two keys
+# above.
+speckle_prob: 0.0
+speckle_looks: 4.0

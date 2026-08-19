@@ -24,6 +24,7 @@ HAND 0.281, Random Forest 0.233 (mean IoU, same test split).
 | SegFormer-B2 | 5 | 1 | **0.4344** | 0.4673 | 0.6126 |
 | SegFormer-B2 + TTA | 5 | 1 | 0.4289 | 0.4586 | 0.6114 |
 | ChangeAwareUNet (this project's own architecture) | 6 (+JRC baseline) | 3 | 0.398 ± 0.010 | -- | -- |
+| U-Net (ResNet-34), 3-seed ensemble (logit-averaged) | 5 | 3 (combined) | **0.4303** | 0.4334 | 0.5832 |
 
 ### Per-seed detail (3-seed models)
 
@@ -35,6 +36,61 @@ HAND 0.281, Random Forest 0.233 (mean IoU, same test split).
 | ChangeAwareUNet | 1 | 0.3921 | 0.3891 | 0.5584 | 1700 |
 | ChangeAwareUNet | 2 | 0.3916 | 0.3918 | 0.5863 | 1714 |
 | ChangeAwareUNet | 3 | 0.4098 | 0.4162 | 0.5657 | 1715 |
+
+## Prediction ensembling -- free accuracy, zero retraining
+
+`training/evaluate_ensemble.py`: combines the primary U-Net's 3 already-trained seed
+checkpoints (1634/1654/1660) by averaging their raw logits (not post-sigmoid
+probabilities -- sigmoid is nonlinear, so the two aren't equivalent) before a single
+sigmoid + threshold.
+
+| Config | Mean IoU | Median IoU | Mean F1 |
+|---|---|---|---|
+| U-Net, best single seed (seed 1) | 0.4198 | 0.4216 | 0.5760 |
+| U-Net, 3-seed mean | 0.415 ± 0.009 | -- | -- |
+| **U-Net, 3-seed logit-averaged ensemble** | **0.4303** | 0.4334 | 0.5832 |
+
+This is the single best result obtained from the plain U-Net architecture -- better than
+every individual seed, including the best one, and clearly outside the 3-seed std band
+(+0.015 over the mean). Unlike everything else in this file, it cost no additional GPU
+training time at all.
+
+## Speckle-noise augmentation -- does it help, and how strong should it be?
+
+`data/speckle.py`: multiplicative Gamma(shape=looks, scale=1/looks) noise applied to
+VV_db/VH_db in linear power (not dB) during training only, with the VV_VH_ratio channel
+recomputed afterward to stay consistent. `speckle_prob=0.5` throughout (50% of training
+samples per epoch); `looks` controls noise strength (lower = noisier). Swept against the
+same seed=1 baseline recipe (dataset=sen1floods11, 30 epochs, patience=8) before deciding
+whether to commit GPU time to a full 3-seed run.
+
+| Config | Seed | Mean IoU | Δ vs seed-1 baseline (0.4198) |
+|---|---|---|---|
+| No speckle (baseline) | 1 | 0.4198 | -- |
+| Speckle, looks=1 (strong) | 1 | 0.4060 | -0.0138 |
+| **Speckle, looks=4 (moderate)** | 1 | **0.4251** | **+0.0053** |
+| Speckle, looks=10 (light) | 1 | 0.4106 | -0.0092 |
+
+looks=4 looked like a real win on seed 1 alone, so it was promoted to a full 3-seed run
+before trusting it -- exactly what this project's own "single-run numbers are not
+evidence" standard (spec section 4.2) exists to catch:
+
+| Config | Seed | Mean IoU | Checkpoint job |
+|---|---|---|---|
+| Speckle, looks=4 | 1 | 0.4251 | 1731 |
+| Speckle, looks=4 | 2 | 0.4271 | 1753 |
+| Speckle, looks=4 | 3 | 0.3977 | 1757 |
+| **Speckle, looks=4, 3-seed mean** | -- | **0.4166 ± 0.0164** | -- |
+
+**The improvement does not hold up.** 3-seed mean (0.4166) is only +0.0017 over the
+baseline's 3-seed mean (0.4149) -- well inside the baseline's own ±0.009 noise band, not a
+real effect. Worse, the *variance* nearly doubled (±0.0164 vs ±0.0089): seed 3 (0.3977)
+landed noticeably below even the baseline's worst seed (0.4046). The seed-1 result that
+looked promising was, in hindsight, a favorable roll, not a genuine property of the
+augmentation. **Conclusion: speckle-noise augmentation as implemented here, at
+speckle_prob=0.5, does not improve this model on this dataset** -- recorded here as a
+negative result precisely because it looked positive on the first (and only the first)
+seed tried, which is the exact trap multi-seed reporting exists to avoid.
 
 ## Channel ablation -- does each feature actually help?
 
@@ -88,6 +144,22 @@ expectation that "the CNN inductive bias likely wins" on a dataset this small (s
 and TTA is not a universal win: it helped U-Net++ (+0.007) but slightly hurt SegFormer-B2
 (-0.0055), so it isn't safe to assume test-time augmentation always helps without
 checking per architecture.
+
+**Ensembling beat every other change tried this session, for zero additional GPU cost.**
+Logit-averaging the 3 seeds already sitting on disk (0.4303) outperforms the single best
+seed, the 3-seed mean, and both single-seed speckle-augmentation attempts -- a reminder
+that "train a fundamentally different thing" isn't always the highest-leverage move
+available when 3 independently-trained checkpoints of the same architecture are already
+sitting unused.
+
+**Speckle-noise augmentation is a negative result, not a missing feature.** It's tempting
+to read the spec's "this is SAR-appropriate and a nice domain-aware detail" (section 4.2)
+as an implicit promise that it will help; on this dataset, with this model, at
+speckle_prob=0.5, it measurably did not, once tested properly across 3 seeds rather than
+trusted on one. Worth trying a lower speckle_prob (less frequent, so the model sees more
+clean data) or applying it only in later epochs (after the model has learned clean
+backscatter patterns first) as a follow-up, rather than concluding the technique is
+categorically wrong for this problem from one probability setting.
 
 **ChangeAwareUNet underperforms the plain U-Net baseline** (0.398 ± 0.010 vs 0.415 ±
 0.009), despite the added two-stream JRC-baseline fusion and extra model complexity. This

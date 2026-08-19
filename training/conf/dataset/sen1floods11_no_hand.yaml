@@ -17,3 +17,5 @@ test_split_csv_name: flood_test_data.csv
 normalization_stats_path: data/sen1floods11_normalization_stats.json
 channel_indices: [0, 1, 2, 3]
 include_jrc_baseline: false
+speckle_prob: 0.0
+speckle_looks: 4.0

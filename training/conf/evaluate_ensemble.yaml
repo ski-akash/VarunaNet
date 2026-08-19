@@ -1,0 +1,14 @@
+# Config for training/evaluate_ensemble.py -- mirrors evaluate_test.yaml,
+# but takes a list of checkpoints (all assumed to share the same model
+# architecture/config) instead of one.
+defaults:
+  - model: unet_resnet34
+  - dataset: sen1floods11
+  - _self_
+
+# ??? (Hydra/OmegaConf's MISSING marker) -- must be passed on the command
+# line, e.g.:
+#   python -m training.evaluate_ensemble checkpoints=[a.pt,b.pt,c.pt]
+checkpoints: ???
+device: auto
+amp_dtype: fp32
