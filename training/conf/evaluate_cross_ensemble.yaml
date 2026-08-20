@@ -1,0 +1,20 @@
+# Config for training/evaluate_cross_ensemble.py -- a list of members,
+# each its own {checkpoint, architecture, encoder_name, in_channels,
+# classes}, logit-averaged together. Unlike evaluate_ensemble.yaml
+# (which assumes every checkpoint shares one `model:` config group),
+# members here can each be a different architecture.
+defaults:
+  - dataset: sen1floods11
+  - _self_
+
+# ??? (Hydra/OmegaConf's MISSING marker) -- must be passed on the command
+# line or overridden by a preset config, e.g.:
+#   python -m training.evaluate_cross_ensemble members='[{checkpoint: a.pt, architecture: unet}, ...]'
+members: ???
+device: auto
+amp_dtype: fp32
+# 4-way flip TTA per member before combining (see
+# evaluate_cross_ensemble.py's docstring for why this switches the
+# combination from logit- to probability-averaging).
+tta: false
+threshold: 0.5

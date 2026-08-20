@@ -1,0 +1,27 @@
+# Preset for training/evaluate_cross_ensemble.py: the best single
+# checkpoint from each of this project's three strongest architectures
+# so far (cnn_results.md) -- SegFormer-B2 (0.4344), U-Net++ (0.4263),
+# and the primary U-Net seed=1 (0.4198). Diverse architectures (CNN
+# encoder-decoder x2, transformer) making genuinely different kinds of
+# mistakes, rather than 3 seeds of the same model -- the natural next
+# step after same-architecture ensembling (evaluate_ensemble_3seed.sh)
+# already proved to be this project's single best zero-retrain result.
+defaults:
+  - dataset: sen1floods11
+  - _self_
+
+members:
+  - checkpoint: /userhome/mtech/akashc1005/job_results/1673/checkpoints/best.pt
+    architecture: segformer_b2
+    encoder_name: b2
+  - checkpoint: /userhome/mtech/akashc1005/job_results/1658/checkpoints/best.pt
+    architecture: unetplusplus
+    encoder_name: resnet34
+  - checkpoint: /userhome/mtech/akashc1005/job_results/1634/checkpoints/best.pt
+    architecture: unet
+    encoder_name: resnet34
+
+device: auto
+amp_dtype: fp32
+tta: false
+threshold: 0.5

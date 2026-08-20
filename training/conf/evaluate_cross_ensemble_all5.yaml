@@ -1,0 +1,34 @@
+# Preset for training/evaluate_cross_ensemble.py: every well-performing
+# checkpoint currently on disk -- the 3 primary U-Net seeds (already
+# proven to ensemble well with each other, 0.4303) plus U-Net++ and
+# SegFormer-B2, logit-averaged together as 5 members. A broader,
+# noisier bet than evaluate_cross_ensemble_top3.yaml's 3-model version:
+# more diversity, but also 3 correlated U-Net votes against 1 each for
+# the other two architectures, so it isn't obviously better a priori --
+# worth comparing against the top3 preset rather than assuming "more
+# members always wins".
+defaults:
+  - dataset: sen1floods11
+  - _self_
+
+members:
+  - checkpoint: /userhome/mtech/akashc1005/job_results/1634/checkpoints/best.pt
+    architecture: unet
+    encoder_name: resnet34
+  - checkpoint: /userhome/mtech/akashc1005/job_results/1654/checkpoints/best.pt
+    architecture: unet
+    encoder_name: resnet34
+  - checkpoint: /userhome/mtech/akashc1005/job_results/1660/checkpoints/best.pt
+    architecture: unet
+    encoder_name: resnet34
+  - checkpoint: /userhome/mtech/akashc1005/job_results/1658/checkpoints/best.pt
+    architecture: unetplusplus
+    encoder_name: resnet34
+  - checkpoint: /userhome/mtech/akashc1005/job_results/1673/checkpoints/best.pt
+    architecture: segformer_b2
+    encoder_name: b2
+
+device: auto
+amp_dtype: fp32
+tta: false
+threshold: 0.5
