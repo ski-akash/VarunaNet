@@ -1,0 +1,10 @@
+# Architecture study variant (spec section 4.1): same U-Net decoder as
+# unet_resnet34.yaml, but a deeper ResNet-50 encoder -- more capacity,
+# at the cost of more parameters to fit on only 252 training chips (real
+# overfitting risk this small a dataset, worth checking empirically
+# rather than assuming bigger is better). See models/unet.py.
+architecture: unet
+encoder_name: resnet50
+encoder_weights: imagenet
+in_channels: 5
+classes: 1

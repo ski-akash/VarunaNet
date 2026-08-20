@@ -83,6 +83,22 @@ def test_gradients_flow_to_input_adapted_first_conv():
     assert torch.any(x.grad != 0)
 
 
+def test_resnet50_encoder_builds_and_adapts_input_channels():
+    # Regression test for training/conf/model/unet_resnet50.yaml (the
+    # Phase 4 architecture study's bigger-encoder variant): confirms the
+    # same in_channels != 3 pretrained-weight-averaging adaptation this
+    # module's docstring describes for ResNet-34 also works for
+    # ResNet-50, rather than assuming smp's adaptation is encoder-agnostic.
+    model = build_unet(encoder_name="resnet50", encoder_weights=None, in_channels=NUM_CHANNELS)
+    model.eval()
+
+    x = torch.randn(1, NUM_CHANNELS, TINY_SIZE, TINY_SIZE)
+    with torch.no_grad():
+        logits = model(x)
+
+    assert logits.shape == (1, NUM_OUTPUT_CLASSES, TINY_SIZE, TINY_SIZE)
+
+
 def test_configurable_encoder_and_channels():
     # These knobs exist specifically for Phase 4's architecture study and
     # for reuse beyond the 5-channel data contract -- confirm they're
