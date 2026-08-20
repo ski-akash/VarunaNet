@@ -370,6 +370,34 @@ def test_run_validation_scores_every_chip_in_the_dataloader():
     assert 0.0 <= summary.mean_iou <= 1.0 or torch.isnan(torch.tensor(summary.mean_iou))
 
 
+def test_run_validation_threshold_changes_predicted_water():
+    # A fixed-output fake model (not a real trained one) makes the
+    # threshold's effect deterministic and directly checkable: a mid-
+    # range logit predicts water at a low threshold but not a high one,
+    # so mean_iou against an all-water target should be higher at the
+    # low threshold.
+    class _ConstantLogitModel(torch.nn.Module):
+        def forward(self, x):
+            # sigmoid(0.2) ~= 0.55 -- above a 0.5 threshold, below 0.6.
+            return torch.full((x.shape[0], 1, x.shape[2], x.shape[3]), 0.2, device=x.device)
+
+    cfg = _tiny_cfg("unused")
+    dataloader = build_val_dataloader(cfg)
+    model = _ConstantLogitModel()
+
+    summary_low = run_validation(
+        model, dataloader, "cpu", torch.float32, use_amp=False, threshold=0.5
+    )
+    summary_high = run_validation(
+        model, dataloader, "cpu", torch.float32, use_amp=False, threshold=0.6
+    )
+
+    # Target labels are mixed water/non-water (see SyntheticFloodDataset),
+    # so predicting "all water" (threshold=0.5) vs "all non-water"
+    # (threshold=0.6) must score differently.
+    assert summary_low.mean_iou != summary_high.mean_iou
+
+
 def test_run_validation_does_not_change_model_weights():
     # Regression check: validation must be read-only. If it ever left
     # BatchNorm running stats (or anything else) mutated, "validating"

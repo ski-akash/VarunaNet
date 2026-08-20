@@ -25,3 +25,8 @@ amp_dtype: fp32
 # _tta_probabilities) -- averages predictions over the original plus
 # horizontal/vertical/both-flipped inputs before thresholding.
 tta: false
+# Sigmoid decision threshold. 0.5 is the standard default; override to
+# apply a threshold chosen by training/tune_threshold.py's val-split
+# sweep (never test-split, to avoid leaking the held-out split into a
+# modeling decision).
+threshold: 0.5

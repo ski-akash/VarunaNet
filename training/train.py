@@ -207,6 +207,7 @@ def run_validation(
     device: str,
     amp_dtype: torch.dtype,
     use_amp: bool,
+    threshold: float = 0.5,
 ) -> MetricSummary:
     """
     Scores the model against `dataloader` with benchmarks/metrics.py --
@@ -218,9 +219,12 @@ def run_validation(
     two different metric implementations that might disagree at the
     margins.
 
-    Threshold is a fixed 0.5 on sigmoid(logits) -- the standard default
+    threshold defaults to 0.5 on sigmoid(logits) -- the standard default
     for binary segmentation, and the same implicit threshold the loss
-    functions (models/losses.py) are built around.
+    functions (models/losses.py) are built around -- but is a real
+    parameter (not hardcoded) so training/tune_threshold.py can sweep it
+    on the val split without touching this function's callers, which all
+    keep the 0.5 default unless they explicitly ask for something else.
     """
     model.eval()
     chip_metrics = []
@@ -229,7 +233,7 @@ def run_validation(
             inputs = inputs.to(device)
             with torch.autocast(device_type=device, dtype=amp_dtype, enabled=use_amp):
                 logits = model(inputs)
-            predicted_water = (torch.sigmoid(logits) > 0.5).squeeze(1).cpu().numpy()
+            predicted_water = (torch.sigmoid(logits) > threshold).squeeze(1).cpu().numpy()
             targets_np = targets.numpy()
             for i, chip_id in enumerate(chip_ids):
                 chip_metrics.append(

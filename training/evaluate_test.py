@@ -68,8 +68,12 @@ def evaluate_test(cfg) -> MetricSummary:
     use_amp = device == "cuda" and cfg.amp_dtype in ("fp16", "bf16")
     amp_dtype = torch.float16 if cfg.amp_dtype == "fp16" else torch.bfloat16
 
+    threshold = getattr(cfg, "threshold", 0.5)
+
     if not getattr(cfg, "tta", False):
-        return run_validation(model, test_dataloader, device, amp_dtype, use_amp)
+        return run_validation(
+            model, test_dataloader, device, amp_dtype, use_amp, threshold=threshold
+        )
 
     model.eval()
     chip_metrics = []
@@ -77,7 +81,7 @@ def evaluate_test(cfg) -> MetricSummary:
         for inputs, targets, chip_ids in test_dataloader:
             inputs = inputs.to(device)
             probs = _tta_probabilities(model, inputs, amp_dtype, use_amp, device)
-            predicted_water = (probs > 0.5).squeeze(1).cpu().numpy()
+            predicted_water = (probs > threshold).squeeze(1).cpu().numpy()
             targets_np = targets.numpy()
             for i, chip_id in enumerate(chip_ids):
                 chip_metrics.append(
