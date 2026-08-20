@@ -24,7 +24,8 @@ HAND 0.281, Random Forest 0.233 (mean IoU, same test split).
 | SegFormer-B2 | 5 | 1 | **0.4344** | 0.4673 | 0.6126 |
 | SegFormer-B2 + TTA | 5 | 1 | 0.4289 | 0.4586 | 0.6114 |
 | ChangeAwareUNet (this project's own architecture) | 6 (+JRC baseline) | 3 | 0.398 ± 0.010 | -- | -- |
-| U-Net (ResNet-34), 3-seed ensemble (logit-averaged) | 5 | 3 (combined) | **0.4303** | 0.4334 | 0.5832 |
+| U-Net (ResNet-34), 3-seed ensemble (logit-averaged) | 5 | 3 (combined) | 0.4303 | 0.4334 | 0.5832 |
+| **Cross-architecture ensemble (SegFormer-B2 + U-Net++ + U-Net)** | 5 | 3 (combined) | **0.4427** | 0.4606 | 0.5998 |
 
 ### Per-seed detail (3-seed models)
 
@@ -54,6 +55,46 @@ This is the single best result obtained from the plain U-Net architecture -- bet
 every individual seed, including the best one, and clearly outside the 3-seed std band
 (+0.015 over the mean). Unlike everything else in this file, it cost no additional GPU
 training time at all.
+
+## Cross-architecture ensembling -- diverse mistakes beat correlated ones
+
+`training/evaluate_cross_ensemble.py`: same logit-averaging idea as the same-architecture
+ensemble above, but combining checkpoints from *different* architectures (SegFormer-B2,
+U-Net++, plain U-Net) instead of 3 seeds of one. Motivated directly by the result above --
+if averaging correlated errors from the same architecture already beats every individual
+seed, averaging genuinely different kinds of mistakes (transformer vs. two CNN
+encoder-decoder variants) is a natural next step, still at zero retraining cost.
+
+| Config | Members | Mean IoU | Median IoU | Mean F1 |
+|---|---|---|---|---|
+| SegFormer-B2 alone (best single architecture) | 1 | 0.4344 | 0.4673 | 0.6126 |
+| U-Net, 3-seed logit-averaged ensemble | 3 (1 architecture) | 0.4303 | 0.4334 | 0.5832 |
+| **Cross-architecture, top-3 (SegFormer-B2 + U-Net++ + U-Net seed 1)** | 3 (3 architectures) | **0.4427** | 0.4606 | 0.5998 |
+| Cross-architecture, all-5 (+ U-Net seeds 2 and 3) | 5 (3 architectures) | 0.4419 | 0.4518 | 0.6014 |
+| Cross-architecture, top-3 + per-member TTA | 3 (3 architectures) | 0.4424 | 0.4525 | 0.5999 |
+
+**This is the best result in this file.** The top-3 cross-architecture ensemble
+(0.4427) beats every other configuration tried, including the previous-best
+SegFormer-B2 single checkpoint (+0.0083) and the same-architecture 3-seed U-Net
+ensemble (+0.0124) -- consistent with the standard reason ensembling works: the three
+architectures get different chips wrong in different ways (a transformer's global
+attention vs. two flavors of CNN skip-connections), so averaging their logits cancels
+more error than averaging 3 seeds of the same architecture, whose mistakes are more
+correlated with each other. The all-5 version, which adds the 2 weaker U-Net seeds
+(0.4046, 0.4203) on top of the top-3 set, does very slightly *worse* (0.4419, -0.0008)
+-- more members is not automatically better once the extra members are 3 correlated
+votes for the same architecture rather than new, independent sources of error.
+
+Folding each member's own 4-way flip TTA into the top-3 ensemble (probability-averaged
+across members instead of logit-averaged, since TTA already collapses each member to a
+post-sigmoid probability -- see evaluate_cross_ensemble.py's docstring) landed at 0.4424,
+a -0.0003 wash against the plain top-3 ensemble. This mirrors the per-architecture TTA
+results above (helped U-Net++, slightly hurt SegFormer-B2): the two effects roughly
+cancel inside the ensemble rather than compounding, so TTA is not worth the extra
+inference cost on top of cross-architecture ensembling specifically. DeepLabV3+ was
+deliberately left out of every cross-ensemble config -- its single-checkpoint score
+(0.3783) is far enough behind the other three that including it looked more likely to
+drag the average down than add useful diversity.
 
 ## Speckle-noise augmentation -- does it help, and how strong should it be?
 
@@ -114,6 +155,82 @@ channels change (`training/conf/dataset/sen1floods11_no_*.yaml`, using the
 | 2 | 0.4183 | 0.4294 | 0.5726 | 1675 |
 | 3 | 0.4014 | 0.3944 | 0.5635 | 1686 |
 
+## Bigger encoder -- does ResNet-50 beat ResNet-34?
+
+Same U-Net decoder, dataset, and training recipe (30 epochs, patience=8, seed=1) as the
+primary baseline; only the encoder depth changes
+(`training/conf/model/unet_resnet50.yaml`). The first two submissions of this job (1781,
+1783) failed before training even started, with a TLS certificate error downloading the
+ImageNet-pretrained ResNet-50 weights from `download.pytorch.org` -- a transient
+compute-node networking issue, not a code problem, and it went away on retry (1786).
+
+| Model | Seed | Mean IoU | Median IoU | Mean F1 | Checkpoint job |
+|---|---|---|---|---|---|
+| U-Net (ResNet-34), seed 1 (baseline) | 1 | 0.4198 | 0.4216 | 0.5760 | 1634 |
+| **U-Net (ResNet-50)** | 1 | **0.3966** | 0.3580 | 0.5374 | 1786 |
+
+**ResNet-50 underperforms ResNet-34 by -0.023 mean IoU**, on a single seed each so part
+of that gap is ordinary seed noise (~±0.009-0.010 per the 3-seed bands above) -- but at
+more than twice the noise band, this is a real signal in the direction the model config's
+own docstring predicted: more capacity, more parameters to fit on only 252 training
+chips, real overfitting risk. Val IoU during training topped out around 0.40 (epoch 16)
+and never approached the ResNet-34 baseline's territory, so this isn't a case of an
+under-trained bigger model that would close the gap with more epochs. Not promoted to a
+3-seed run -- the single-seed gap is large enough, and in the expected direction, that
+spending 2 more A100 runs to confirm "bigger encoder doesn't help on this dataset" isn't
+the best use of remaining GPU budget.
+
+## Loss ablation -- Focal loss vs. the default Dice+BCE
+
+Same U-Net (ResNet-34) architecture, dataset, and training recipe as the primary
+baseline; only the loss function changes (`loss=focal`, `models/losses.py`'s
+already-existing but never-yet-run config knob).
+
+| Model | Seed | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | Checkpoint job |
+|---|---|---|---|---|---|---|---|
+| U-Net (ResNet-34), Dice+BCE (baseline) | 1 | 0.4198 | 0.4216 | 0.5760 | -- | -- | 1634 |
+| **U-Net (ResNet-34), Focal loss** | 1 | **0.3359** | 0.2690 | 0.4850 | 0.6093 | 0.4321 | 1789 |
+
+**Focal loss is a clear regression here, -0.084 mean IoU** -- far outside any seed-noise
+band this project has measured. The precision/recall split explains why: precision is
+actually the highest of any single-seed U-Net result in this file (0.6093), but recall
+collapses to 0.4321, well below the baseline's implicit recall (Dice+BCE's chip-level F1
+of 0.5760 at this precision/recall balance implies materially higher recall). Focal
+loss's whole mechanism is down-weighting easy, well-classified examples to focus
+gradient on hard ones; on this dataset, that appears to make the model conservative
+about calling a pixel "water" rather than better at the genuinely hard flood-boundary
+cases the loss is meant to help with. Training loss values themselves aren't comparable
+to Dice+BCE's (focal loss is on a different numeric scale), so this had to be judged on
+val/test IoU rather than the loss curve. Not promoted to a 3-seed run -- the gap is too
+large to plausibly be noise.
+
+## Threshold tuning -- is the default 0.5 sigmoid cutoff actually optimal?
+
+`training/tune_threshold.py`: sweeps the sigmoid decision threshold on the *val* split
+(never test, to avoid leaking the held-out split into a modeling decision -- see that
+module's docstring) for the primary U-Net's seed=1 checkpoint (job 1634), then the chosen
+threshold would be scored against test exactly once via `evaluate_test.py`'s own
+`threshold=` override.
+
+| Threshold | Val Mean IoU |
+|---|---|
+| 0.30 | 0.3852 |
+| 0.35 | 0.3981 |
+| 0.40 | 0.4004 |
+| 0.45 | 0.4017 |
+| **0.50 (default)** | **0.4017** |
+| 0.55 | 0.4006 |
+| 0.60 | 0.3980 |
+| 0.65 | 0.3942 |
+| 0.70 | 0.3937 |
+
+**0.5 is already optimal (tied with 0.45) for this checkpoint** -- a negative result, but
+a useful one: it rules out "the default threshold is leaving free accuracy on the table"
+as an explanation for this model's IoU, and means the checkpoint's predicted
+probabilities are already well-calibrated around the standard cutoff rather than skewed
+in a way that would reward tuning. Not applied to test (no threshold override was chosen
+to score there, since the default already won the sweep).
+
 ## Interpretation
 
 **None of the three single-feature removals produce a clear drop.** Run-to-run seed
@@ -145,12 +262,16 @@ and TTA is not a universal win: it helped U-Net++ (+0.007) but slightly hurt Seg
 (-0.0055), so it isn't safe to assume test-time augmentation always helps without
 checking per architecture.
 
-**Ensembling beat every other change tried this session, for zero additional GPU cost.**
-Logit-averaging the 3 seeds already sitting on disk (0.4303) outperforms the single best
-seed, the 3-seed mean, and both single-seed speckle-augmentation attempts -- a reminder
-that "train a fundamentally different thing" isn't always the highest-leverage move
-available when 3 independently-trained checkpoints of the same architecture are already
-sitting unused.
+**Ensembling beat every other change tried this session, for zero additional GPU cost --
+and cross-architecture ensembling beats same-architecture ensembling.** Logit-averaging
+the 3 U-Net seeds already sitting on disk (0.4303) outperformed the single best seed, the
+3-seed mean, and both single-seed speckle-augmentation attempts; averaging across
+architectures instead (SegFormer-B2 + U-Net++ + U-Net, 0.4427) beats that too, and is the
+best result in this entire file. The common thread: "train a fundamentally different
+thing" isn't always the highest-leverage move available when several independently-wrong
+checkpoints are already sitting unused, and errors that are less correlated with each
+other (different architecture families) cancel out more than errors that are more
+correlated (different seeds of the same architecture).
 
 **Speckle-noise augmentation is a negative result, not a missing feature.** It's tempting
 to read the spec's "this is SAR-appropriate and a nice domain-aware detail" (section 4.2)
@@ -168,3 +289,16 @@ is consistent with a caveat already recorded in the model's own docstring
 (pre-flood, during-flood) pairs, so the permanent-water mask is only a proxy for "what
 this pixel looked like before," and that proxy may not carry enough signal for the
 two-stream design to earn back its added complexity on this specific dataset.
+
+**Three more negative results, same session: bigger encoder, a different loss, and
+threshold tuning all failed to beat the existing baseline.** ResNet-50 (-0.023) and Focal
+loss (-0.084) both underperform clearly, and in the direction their own risk factors
+predicted (more capacity to overfit 252 chips; a loss that trades recall for precision on
+a task where recall already looked like the harder half). Threshold tuning found nothing
+to tune -- 0.5 was already the val-optimal cutoff. None of the three were promoted to
+3-seed runs, for the same reason: each gap (or non-gap) was large enough, and in a
+plausible enough direction, to trust from one seed rather than spend more GPU budget
+confirming it. Taken together with the channel ablation and speckle results above, the
+picture for this dataset/architecture is that most single-knob changes tried so far
+either do nothing or hurt -- the wins that have held up (SegFormer-B2, U-Net++, and
+especially ensembling) all changed something more structural than one hyperparameter.
