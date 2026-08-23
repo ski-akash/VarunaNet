@@ -21,6 +21,7 @@ from sklearn.ensemble import RandomForestClassifier
 from benchmarks.metrics import (
     ChipMetrics,
     MetricSummary,
+    aggregate_metrics,
     compute_chip_metrics,
     event_name,
     summarize,
@@ -149,6 +150,27 @@ def make_otsu_hand_predict(event_thresholds: dict[str, float]) -> PredictFn:
     return predict
 
 
+def all_dry_predict(sample: Sen1Floods11Sample, slope: np.ndarray, hand: np.ndarray) -> np.ndarray:
+    """
+    The degenerate control: predict that nothing is water, anywhere, ever.
+
+    This exists to make a specific point measurable rather than rhetorical.
+    The published Assam/Brahmaputra SAR flood literature reports Overall
+    Accuracy (93.6%/95.15% for the change-detection study, >82% for the
+    RF/SVM/CART study) rather than IoU. Because flood water is a small
+    minority of pixels, a model that detects nothing still scores a high OA.
+    Running this baseline through the identical evaluation path as every real
+    model quantifies exactly how much of a published OA figure is available
+    for free -- which is the evidence behind this project's choice to report
+    IoU as the primary metric (spec section 15.0/15.1).
+
+    Its IoU is 0 (or NaN on a genuinely dry chip, where predicting no water is
+    correct and the metric is undefined rather than wrong) and its Kappa is
+    ~0, which is precisely the contrast worth showing.
+    """
+    return np.zeros(sample.label.shape, dtype=bool)
+
+
 def make_random_forest_predict(model: RandomForestClassifier) -> PredictFn:
     """Bind a trained model into a PredictFn, matching the other baselines' signature."""
 
@@ -212,11 +234,28 @@ def train_random_forest_baseline(
 
 
 def print_report(name: str, chip_metrics: list[ChipMetrics]) -> None:
-    """Print an aggregate summary and a per-event breakdown for one baseline."""
+    """
+    Print both summaries and a per-event breakdown for one baseline.
+
+    Two overall lines, not one, and the order matters: the pooled/aggregate
+    line comes first because it is the number comparable to published work
+    (Sen1Floods11's own figures, and the OA the Assam literature reports),
+    while the per-chip-mean line below it is the more conservative per-scene
+    view. Showing only one of them is what previously made this project's
+    numbers impossible to place against the literature -- see the comment
+    above aggregate_metrics() in benchmarks/metrics.py for why they differ.
+    """
+    pooled = aggregate_metrics(chip_metrics)
     overall = summarize(chip_metrics)
     print(f"\n=== {name} ===")
     print(
-        f"overall: mean IoU {overall.mean_iou:.3f}, median IoU {overall.median_iou:.3f}, "
+        f"pooled:   IoU {pooled.iou:.3f}, F1 {pooled.f1:.3f}, "
+        f"precision {pooled.precision:.3f}, recall {pooled.recall:.3f}, "
+        f"OA {pooled.overall_accuracy:.4f}, kappa {pooled.kappa:.3f} "
+        f"(n={pooled.n_chips} chips, {pooled.n_valid_pixels:,} valid px)"
+    )
+    print(
+        f"per-chip: mean IoU {overall.mean_iou:.3f}, median IoU {overall.median_iou:.3f}, "
         f"mean F1 {overall.mean_f1:.3f} (n={overall.n_chips})"
     )
 
@@ -238,6 +277,11 @@ if __name__ == "__main__":
 
     train_dataset = Sen1Floods11Dataset(IMAGE_DIR, LABEL_DIR, SPLITS_DIR / "flood_train_data.csv")
     test_dataset = Sen1Floods11Dataset(IMAGE_DIR, LABEL_DIR, SPLITS_DIR / "flood_test_data.csv")
+
+    # The degenerate control runs first, deliberately: every real baseline's
+    # Overall Accuracy below should be read against this one's, since that is
+    # the score available for predicting nothing at all.
+    print_report("All-dry (control)", evaluate_baseline(all_dry_predict, test_dataset, DEM_DIR))
 
     # Thresholds come from the test set's own chips, same as the original
     # per-chip version did (Otsu doesn't train -- there's no separate fit

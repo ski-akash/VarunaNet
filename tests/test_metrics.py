@@ -6,11 +6,15 @@ import pytest
 from benchmarks.metrics import (
     ChipMetrics,
     ConfusionCounts,
+    aggregate_metrics,
+    cohens_kappa,
     compute_chip_metrics,
     confusion_counts,
     event_name,
     f1_score,
     iou_score,
+    overall_accuracy,
+    pool_counts,
     precision_score,
     recall_score,
     summarize,
@@ -150,3 +154,149 @@ def test_summarize_per_event_groups_correctly():
     assert per_event["Bolivia"].mean_iou == pytest.approx(0.4)
     assert per_event["Ghana"].n_chips == 1
     assert per_event["Ghana"].mean_iou == pytest.approx(0.9)
+
+
+# --- Overall Accuracy, Kappa, and pooled/aggregate metrics --------------------
+
+
+def test_overall_accuracy_basic():
+    # 6 correct out of 10 valid pixels.
+    counts = ConfusionCounts(true_positive=2, true_negative=4, false_positive=3, false_negative=1)
+    assert overall_accuracy(counts) == pytest.approx(0.6)
+
+
+def test_overall_accuracy_undefined_with_no_valid_pixels():
+    counts = ConfusionCounts(true_positive=0, true_negative=0, false_positive=0, false_negative=0)
+    assert np.isnan(overall_accuracy(counts))
+
+
+def test_cohens_kappa_perfect_agreement_is_one():
+    counts = ConfusionCounts(true_positive=30, true_negative=70, false_positive=0, false_negative=0)
+    assert cohens_kappa(counts) == pytest.approx(1.0)
+
+
+def test_cohens_kappa_matches_hand_computed_value():
+    # po = (20+60)/100 = 0.80
+    # pe = ((20+10)*(20+10) + (10+60)*(10+60)) / 100^2 = (900 + 4900)/10000 = 0.58
+    # kappa = (0.80 - 0.58) / (1 - 0.58) = 0.22/0.42
+    counts = ConfusionCounts(
+        true_positive=20, true_negative=60, false_positive=10, false_negative=10
+    )
+    assert cohens_kappa(counts) == pytest.approx(0.22 / 0.42)
+
+
+def test_cohens_kappa_undefined_when_expected_agreement_is_total():
+    # Everything is non-water and everything was predicted non-water: observed
+    # agreement is perfect but chance agreement is also 1, so kappa is 0/0.
+    counts = ConfusionCounts(true_positive=0, true_negative=50, false_positive=0, false_negative=0)
+    assert np.isnan(cohens_kappa(counts))
+
+
+def test_all_dry_prediction_scores_high_overall_accuracy_but_zero_iou():
+    """
+    The single most important property in this module: a model that detects
+    nothing still posts a high Overall Accuracy on an imbalanced flood scene,
+    while IoU correctly reports it as useless. This is the evidence behind
+    reporting IoU as primary and treating the published literature's OA
+    figures as not directly meaningful (spec section 15.0).
+    """
+    # 5% of pixels are water -- a realistic flood-chip imbalance.
+    label = np.full((10, 10), LABEL_NON_WATER)
+    label[0, :5] = LABEL_WATER
+    predicted_nothing = np.zeros((10, 10), dtype=bool)
+
+    counts = confusion_counts(predicted_nothing, label)
+
+    assert overall_accuracy(counts) == pytest.approx(0.95)
+    assert iou_score(counts) == pytest.approx(0.0)
+    # Kappa correctly refuses to reward the constant predictor the way OA does.
+    assert cohens_kappa(counts) == pytest.approx(0.0)
+
+
+def test_pool_counts_sums_across_chips():
+    metrics = [
+        compute_chip_metrics(
+            "Ghana_1",
+            np.array([[True, False]]),
+            np.array([[LABEL_WATER, LABEL_NON_WATER]]),
+        ),
+        compute_chip_metrics(
+            "Ghana_2",
+            np.array([[True, True]]),
+            np.array([[LABEL_WATER, LABEL_NON_WATER]]),
+        ),
+    ]
+
+    pooled = pool_counts(metrics)
+
+    assert pooled == ConfusionCounts(
+        true_positive=2, true_negative=1, false_positive=1, false_negative=0
+    )
+
+
+def test_pool_counts_rejects_chip_metrics_without_counts():
+    # Hand-constructed ChipMetrics carry no confusion counts; silently skipping
+    # them would change the denominator and yield a wrong-but-plausible number.
+    hand_made = [ChipMetrics(chip_id="a", event="X", iou=0.5, f1=0.5, precision=0.5, recall=0.5)]
+
+    with pytest.raises(ValueError, match="no confusion counts"):
+        pool_counts(hand_made)
+
+
+def test_aggregate_iou_differs_from_per_chip_mean_iou():
+    """
+    Pooled IoU and per-chip-mean IoU are genuinely different numbers, and this
+    test pins down the direction of the difference that motivated adding the
+    pooled version at all: a tiny chip scoring 0 drags the per-chip mean down
+    far more than it moves the pixel-weighted pooled value.
+    """
+    # Chip A: large and perfectly predicted (100 water px, all correct).
+    label_a = np.full((10, 20), LABEL_NON_WATER)
+    label_a[:, :10] = LABEL_WATER
+    predicted_a = label_a == LABEL_WATER
+
+    # Chip B: tiny amount of water, entirely missed -> IoU 0.
+    label_b = np.full((10, 20), LABEL_NON_WATER)
+    label_b[0, 0] = LABEL_WATER
+    predicted_b = np.zeros((10, 20), dtype=bool)
+
+    metrics = [
+        compute_chip_metrics("Ghana_1", predicted_a, label_a),
+        compute_chip_metrics("Ghana_2", predicted_b, label_b),
+    ]
+
+    per_chip = summarize(metrics)
+    pooled = aggregate_metrics(metrics)
+
+    # Per-chip mean averages 1.0 and 0.0 with equal weight.
+    assert per_chip.mean_iou == pytest.approx(0.5)
+    # Pooled weights by pixel: 100 correct water px vs 1 missed -> ~0.99.
+    assert pooled.iou == pytest.approx(100 / 101)
+    assert pooled.iou > per_chip.mean_iou
+
+
+def test_aggregate_metrics_reports_chip_and_pixel_counts():
+    metrics = [
+        compute_chip_metrics(
+            "Ghana_1",
+            np.array([[True, False]]),
+            np.array([[LABEL_WATER, LABEL_IGNORE]]),
+        ),
+        compute_chip_metrics(
+            "Ghana_2",
+            np.array([[True, True]]),
+            np.array([[LABEL_WATER, LABEL_NON_WATER]]),
+        ),
+    ]
+
+    pooled = aggregate_metrics(metrics)
+
+    assert pooled.n_chips == 2
+    # Ignore pixels are excluded from the valid-pixel total, not counted as
+    # correct or incorrect: 1 valid px from chip 1 + 2 from chip 2.
+    assert pooled.n_valid_pixels == 3
+
+
+def test_aggregate_metrics_rejects_empty_input():
+    with pytest.raises(ValueError, match="empty list"):
+        aggregate_metrics([])
