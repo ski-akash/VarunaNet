@@ -9,7 +9,7 @@ to care that benchmarks/evaluate.py actually feeds it VH in practice.
 import numpy as np
 import pytest
 
-from benchmarks.otsu_hand import otsu_hand_water_mask
+from benchmarks.otsu_hand import otsu_hand_water_mask, plausible_terrain_mask
 
 
 def make_scene(size: int = 64):
@@ -72,3 +72,48 @@ def test_otsu_hand_water_mask_passes_precomputed_threshold_through_to_otsu():
 
     non_shadow = predicted_water.copy()
     assert non_shadow[0, 0]  # top-left corner: outside the shadow patch, terrain is plausible
+
+
+def test_nan_terrain_does_not_reject_a_water_pixel():
+    """
+    Regression test for the bug that made this baseline score WORSE than plain
+    Otsu. `hand <= threshold` evaluates to False for NaN, so the original
+    implementation silently rejected every pixel where HAND could not be
+    computed -- and data/hand.py leaves a NaN border on every real chip.
+
+    Measured on the real test split, that removed 192,740 true water pixels
+    (9.75% of all true positives) against only 68,217 false ones: chip borders
+    preferentially cut through rivers, which is exactly where HAND's flow
+    routing fails. NaN terrain must mean "unknown, abstain", not "reject".
+    """
+    band_db = np.full((4, 4), -25.0)  # dark everywhere -> Otsu says water
+    hand = np.full((4, 4), np.nan)
+    slope = np.full((4, 4), np.nan)
+
+    mask = otsu_hand_water_mask(band_db, hand, slope, otsu_threshold=-20.0)
+
+    assert mask.all(), "NaN terrain must not veto Otsu's own water decision"
+
+
+def test_plausible_terrain_mask_still_rejects_on_known_bad_terrain():
+    """The NaN fix must not disable the filter where terrain IS known."""
+    hand = np.array([[1.0, 100.0], [1.0, 1.0]])
+    slope = np.array([[1.0, 1.0], [80.0, 1.0]])
+
+    mask = plausible_terrain_mask(hand, slope, hand_threshold=5.0, slope_threshold=15.0)
+
+    assert mask[0, 0]  # low HAND, flat -> plausible
+    assert not mask[0, 1]  # HAND 100m -> implausible
+    assert not mask[1, 0]  # slope 80deg -> implausible
+    assert mask[1, 1]
+
+
+def test_plausible_terrain_mask_mixes_nan_and_known_values():
+    """A NaN in one layer must not suppress a real rejection in the other."""
+    hand = np.array([[np.nan, np.nan]])
+    slope = np.array([[1.0, 80.0]])
+
+    mask = plausible_terrain_mask(hand, slope, hand_threshold=5.0, slope_threshold=15.0)
+
+    assert mask[0, 0]  # HAND unknown, slope fine -> keep
+    assert not mask[0, 1]  # HAND unknown, but slope is definitively too steep

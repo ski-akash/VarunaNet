@@ -29,9 +29,21 @@ from pathlib import Path
 import numpy as np
 
 from benchmarks.evaluate import build_terrain_cache, compute_per_event_otsu_thresholds
-from benchmarks.metrics import ChipMetrics, MetricSummary, compute_chip_metrics, event_name, summarize
+from benchmarks.metrics import (
+    AggregateMetrics,
+    ChipMetrics,
+    MetricSummary,
+    aggregate_metrics,
+    compute_chip_metrics,
+    event_name,
+    summarize,
+)
 from benchmarks.otsu import otsu_water_mask, smooth_backscatter
-from benchmarks.otsu_hand import DEFAULT_HAND_THRESHOLD_M, DEFAULT_SLOPE_THRESHOLD_DEG
+from benchmarks.otsu_hand import (
+    DEFAULT_HAND_THRESHOLD_M,
+    DEFAULT_SLOPE_THRESHOLD_DEG,
+    plausible_terrain_mask,
+)
 from data.sen1floods11 import Sen1Floods11Dataset
 
 HAND_THRESHOLD_CANDIDATES = [5.0, 10.0, 15.0, 20.0, 30.0, 50.0, 100.0]
@@ -67,13 +79,25 @@ def precompute_candidates(dataset: Sen1Floods11Dataset, dem_dir: Path) -> list[C
 
 def score_grid_cell(
     entries: list[CandidateEntry], hand_threshold: float, slope_threshold: float
-) -> MetricSummary:
+) -> tuple[AggregateMetrics, MetricSummary]:
+    """
+    Score one (hand, slope) threshold pair, returning both the pooled/aggregate
+    metrics (the literature-comparable number, and what selection below
+    maximizes) and the per-chip-mean summary.
+
+    Uses benchmarks/otsu_hand.py's plausible_terrain_mask rather than
+    re-deriving the comparison inline -- the inline version this replaced
+    carried the NaN-rejects-the-pixel bug documented there, which meant this
+    grid search was tuning thresholds on top of a mask that was throwing away
+    ~10% of all true water before any threshold was applied.
+    """
     chip_metrics: list[ChipMetrics] = []
     for chip_id, label, candidate, slope, hand in entries:
-        plausible_terrain = (hand <= hand_threshold) & (slope <= slope_threshold)
-        predicted = candidate & plausible_terrain
+        predicted = candidate & plausible_terrain_mask(
+            hand, slope, hand_threshold, slope_threshold
+        )
         chip_metrics.append(compute_chip_metrics(chip_id, predicted, label))
-    return summarize(chip_metrics)
+    return aggregate_metrics(chip_metrics), summarize(chip_metrics)
 
 
 if __name__ == "__main__":
@@ -93,37 +117,46 @@ if __name__ == "__main__":
         f"Grid search: {len(HAND_THRESHOLD_CANDIDATES)}x{len(SLOPE_THRESHOLD_CANDIDATES)} "
         "combinations, scored on TRAIN only..."
     )
-    best_iou, best_hand, best_slope = float("-inf"), DEFAULT_HAND_THRESHOLD_M, DEFAULT_SLOPE_THRESHOLD_DEG
+    best_iou = float("-inf")
+    best_hand, best_slope = DEFAULT_HAND_THRESHOLD_M, DEFAULT_SLOPE_THRESHOLD_DEG
     for hand_threshold in HAND_THRESHOLD_CANDIDATES:
         for slope_threshold in SLOPE_THRESHOLD_CANDIDATES:
-            summary = score_grid_cell(train_entries, hand_threshold, slope_threshold)
+            pooled, summary = score_grid_cell(train_entries, hand_threshold, slope_threshold)
             print(
                 f"  hand<={hand_threshold:>6.1f}m slope<={slope_threshold:>5.1f}deg  "
-                f"train mean_iou={summary.mean_iou:.4f}"
+                f"train pooled_iou={pooled.iou:.4f} mean_iou={summary.mean_iou:.4f}"
             )
-            if summary.mean_iou > best_iou:
-                best_iou, best_hand, best_slope = summary.mean_iou, hand_threshold, slope_threshold
+            # Selection maximizes POOLED IoU: that is the dataset-level metric
+            # published work reports (spec section 15.1), so it is the one the
+            # chosen thresholds should be optimal for.
+            if pooled.iou > best_iou:
+                best_iou, best_hand, best_slope = pooled.iou, hand_threshold, slope_threshold
 
     print(
         f"\nBest on train: hand_threshold={best_hand}m, slope_threshold={best_slope}deg "
-        f"(train mean_iou={best_iou:.4f})"
+        f"(train pooled_iou={best_iou:.4f})"
     )
 
-    print("\nScoring the chosen thresholds on the held-out TEST split (never used for selection)...")
+    print("\nScoring chosen thresholds on the held-out TEST split (never used for selection)...")
     test_entries = precompute_candidates(test_dataset, DEM_DIR)
 
-    tuned_summary = score_grid_cell(test_entries, best_hand, best_slope)
+    tuned_pooled, tuned_summary = score_grid_cell(test_entries, best_hand, best_slope)
     print(
         f"tuned  (hand<={best_hand}m, slope<={best_slope}deg): "
-        f"mean_iou={tuned_summary.mean_iou:.4f} median_iou={tuned_summary.median_iou:.4f} "
-        f"mean_f1={tuned_summary.mean_f1:.4f} mean_precision={tuned_summary.mean_precision:.4f} "
+        f"pooled_iou={tuned_pooled.iou:.4f} OA={tuned_pooled.overall_accuracy:.4f} "
+        f"kappa={tuned_pooled.kappa:.4f} | mean_iou={tuned_summary.mean_iou:.4f} "
+        f"median_iou={tuned_summary.median_iou:.4f} "
+        f"mean_precision={tuned_summary.mean_precision:.4f} "
         f"mean_recall={tuned_summary.mean_recall:.4f}"
     )
 
-    default_summary = score_grid_cell(
-        test_entries, DEFAULT_HAND_THRESHOLD_M, DEFAULT_SLOPE_THRESHOLD_DEG
-    )
+    # No-terrain-filter control: what plain Otsu alone scores on the same
+    # entries. Otsu+HAND must beat THIS to justify existing at all -- it was
+    # failing to before the NaN fix in benchmarks/otsu_hand.py.
+    plain_pooled, plain_summary = score_grid_cell(test_entries, float("inf"), float("inf"))
     print(
-        f"untuned (hand<={DEFAULT_HAND_THRESHOLD_M}m, slope<={DEFAULT_SLOPE_THRESHOLD_DEG}deg): "
-        f"mean_iou={default_summary.mean_iou:.4f} median_iou={default_summary.median_iou:.4f}"
+        f"plain Otsu (no terrain filter):            "
+        f"pooled_iou={plain_pooled.iou:.4f} OA={plain_pooled.overall_accuracy:.4f} "
+        f"kappa={plain_pooled.kappa:.4f} | mean_iou={plain_summary.mean_iou:.4f} "
+        f"median_iou={plain_summary.median_iou:.4f}"
     )
