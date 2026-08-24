@@ -64,12 +64,12 @@ def test_ensemble_of_one_matches_single_checkpoint_evaluation(tmp_path):
     OmegaConf.set_struct(cfg, False)
     checkpoint_path = str(tmp_path / "best.pt")
     cfg.checkpoint = checkpoint_path
-    single_summary = evaluate_test(cfg)
+    single_results = evaluate_test(cfg)
 
     cfg.checkpoints = [checkpoint_path]
     ensemble_summary = evaluate_ensemble(cfg)
 
-    assert single_summary.mean_iou == ensemble_summary.mean_iou
+    assert single_results.per_chip.mean_iou == ensemble_summary.mean_iou
 
 
 def test_logit_averaging_differs_from_naive_probability_averaging(tmp_path):

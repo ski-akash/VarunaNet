@@ -101,9 +101,9 @@ def test_cross_ensemble_of_one_matches_single_checkpoint_evaluation(tmp_path):
     OmegaConf.set_struct(cfg, False)
     checkpoint_path = str(tmp_path / "best.pt")
     cfg.checkpoint = checkpoint_path
-    single_summary = evaluate_test(cfg)
+    single_results = evaluate_test(cfg)
 
     cfg.members = [{"checkpoint": checkpoint_path, "architecture": "unet"}]
     cross_summary = evaluate_cross_ensemble(cfg)
 
-    assert single_summary.mean_iou == cross_summary.mean_iou
+    assert single_results.per_chip.mean_iou == cross_summary.mean_iou

@@ -46,6 +46,7 @@ def test_evaluate_test_scores_every_chip_from_a_saved_checkpoint(tmp_path):
     OmegaConf.set_struct(cfg, False)
     cfg.checkpoint = str(tmp_path / "best.pt")
 
-    summary = evaluate_test(cfg)
+    results = evaluate_test(cfg)
 
-    assert summary.n_chips == cfg.dataset.num_samples
+    assert results.per_chip.n_chips == cfg.dataset.num_samples
+    assert results.pooled.n_chips == cfg.dataset.num_samples

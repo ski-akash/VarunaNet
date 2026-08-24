@@ -12,19 +12,42 @@ Uses the exact same benchmarks/metrics.py scoring the classical baselines
 (Otsu, Otsu+HAND, Random Forest) were measured with in benchmarks/RESULTS.md,
 so "beats baseline" is a real apples-to-apples comparison.
 
+Reports BOTH the pooled/aggregate metrics (the number comparable to
+Sen1Floods11's own published figures and the ~0.72 SOTA -- see spec section
+15.1) and the per-chip mean (the stricter per-scene view this project has
+always reported). Every classical and shallow-ML baseline in benchmarks/ was
+re-scored to report both once the gap between them turned out to be large
+(~0.17 pooled vs per-chip on Otsu); a CNN checkpoint scored only per-chip
+here would not be comparable to any of them.
+
 Run directly:
     python -m training.evaluate_test checkpoint=checkpoints/best.pt
     python -m training.evaluate_test checkpoint=checkpoints/best.pt tta=true
 """
 
+from dataclasses import dataclass
+
 import hydra
 import torch
 from omegaconf import DictConfig
 
-from benchmarks.metrics import MetricSummary, compute_chip_metrics, summarize
+from benchmarks.metrics import (
+    AggregateMetrics,
+    ChipMetrics,
+    MetricSummary,
+    aggregate_metrics,
+    compute_chip_metrics,
+    summarize,
+)
 from models.build_model import build_model
 from training.checkpoint import load_checkpoint
-from training.train import build_dataloader, resolve_device, run_validation
+from training.train import build_dataloader, resolve_device
+
+
+@dataclass
+class TestResults:
+    pooled: AggregateMetrics
+    per_chip: MetricSummary
 
 
 def _tta_probabilities(model: torch.nn.Module, inputs: torch.Tensor, amp_dtype, use_amp, device):
@@ -49,7 +72,43 @@ def _tta_probabilities(model: torch.nn.Module, inputs: torch.Tensor, amp_dtype, 
     return total / len(flip_specs)
 
 
-def evaluate_test(cfg) -> MetricSummary:
+def _predict_chip_metrics(
+    model: torch.nn.Module,
+    dataloader,
+    device: str,
+    amp_dtype: torch.dtype,
+    use_amp: bool,
+    threshold: float,
+    tta: bool,
+) -> list[ChipMetrics]:
+    """
+    Score every chip in `dataloader`, TTA or not, and return the raw per-chip
+    metrics list. Deliberately not just calling training.train.run_validation
+    (which only returns the already-summarized MetricSummary): computing both
+    the pooled and per-chip views here needs the underlying ChipMetrics, with
+    each one's ConfusionCounts intact, so aggregate_metrics can pool them.
+    """
+    model.eval()
+    chip_metrics: list[ChipMetrics] = []
+    with torch.no_grad():
+        for inputs, targets, chip_ids in dataloader:
+            inputs = inputs.to(device)
+            if tta:
+                probs = _tta_probabilities(model, inputs, amp_dtype, use_amp, device)
+            else:
+                with torch.autocast(device_type=device, dtype=amp_dtype, enabled=use_amp):
+                    logits = model(inputs)
+                probs = torch.sigmoid(logits)
+            predicted_water = (probs > threshold).squeeze(1).cpu().numpy()
+            targets_np = targets.numpy()
+            for i, chip_id in enumerate(chip_ids):
+                chip_metrics.append(
+                    compute_chip_metrics(chip_id, predicted_water[i], targets_np[i])
+                )
+    return chip_metrics
+
+
+def evaluate_test(cfg) -> TestResults:
     device = resolve_device(cfg.device)
 
     model = build_model(
@@ -67,38 +126,29 @@ def evaluate_test(cfg) -> MetricSummary:
 
     use_amp = device == "cuda" and cfg.amp_dtype in ("fp16", "bf16")
     amp_dtype = torch.float16 if cfg.amp_dtype == "fp16" else torch.bfloat16
-
     threshold = getattr(cfg, "threshold", 0.5)
+    tta = getattr(cfg, "tta", False)
 
-    if not getattr(cfg, "tta", False):
-        return run_validation(
-            model, test_dataloader, device, amp_dtype, use_amp, threshold=threshold
-        )
-
-    model.eval()
-    chip_metrics = []
-    with torch.no_grad():
-        for inputs, targets, chip_ids in test_dataloader:
-            inputs = inputs.to(device)
-            probs = _tta_probabilities(model, inputs, amp_dtype, use_amp, device)
-            predicted_water = (probs > threshold).squeeze(1).cpu().numpy()
-            targets_np = targets.numpy()
-            for i, chip_id in enumerate(chip_ids):
-                chip_metrics.append(
-                    compute_chip_metrics(chip_id, predicted_water[i], targets_np[i])
-                )
-    return summarize(chip_metrics)
+    chip_metrics = _predict_chip_metrics(
+        model, test_dataloader, device, amp_dtype, use_amp, threshold, tta
+    )
+    return TestResults(pooled=aggregate_metrics(chip_metrics), per_chip=summarize(chip_metrics))
 
 
 @hydra.main(config_path="conf", config_name="evaluate_test", version_base=None)
 def main(cfg: DictConfig) -> None:
-    summary = evaluate_test(cfg)
+    results = evaluate_test(cfg)
     tag = "tta" if getattr(cfg, "tta", False) else "no-tta"
+    pooled, per_chip = results.pooled, results.per_chip
     print(
-        f"test split [{tag}] ({cfg.checkpoint}): "
-        f"mean_iou={summary.mean_iou:.4f} median_iou={summary.median_iou:.4f} "
-        f"mean_f1={summary.mean_f1:.4f} mean_precision={summary.mean_precision:.4f} "
-        f"mean_recall={summary.mean_recall:.4f}"
+        f"test split [{tag}] ({cfg.checkpoint}):\n"
+        f"  pooled:   IoU {pooled.iou:.4f}, F1 {pooled.f1:.4f}, "
+        f"precision {pooled.precision:.4f}, recall {pooled.recall:.4f}, "
+        f"OA {pooled.overall_accuracy:.4f}, kappa {pooled.kappa:.4f} "
+        f"(n={pooled.n_chips} chips, {pooled.n_valid_pixels:,} valid px)\n"
+        f"  per-chip: mean IoU {per_chip.mean_iou:.4f}, median IoU {per_chip.median_iou:.4f}, "
+        f"mean F1 {per_chip.mean_f1:.4f}, mean precision {per_chip.mean_precision:.4f}, "
+        f"mean recall {per_chip.mean_recall:.4f}"
     )
 
 
