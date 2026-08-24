@@ -70,9 +70,22 @@ def _load_s1_image(path: Path) -> np.ndarray:
         bands = src.read().astype(np.float32)  # [2, H, W]: VV_db, VH_db
 
     vv_db, vh_db = bands[0], bands[1]
-    # VH can be at or near 0 dB, so guard the denominator instead of
-    # dividing by something that can land on exactly 0.
-    vv_vh_ratio = vv_db / np.where(vh_db == 0, 1e-6, vh_db)
+    # VV_db and VH_db are already logarithmic (decibel) quantities, so the
+    # power ratio VV/VH is expressed in dB by SUBTRACTING them, not dividing
+    # them -- division in linear power space is subtraction in log space, the
+    # same reason two magnitudes in dB combine by adding/subtracting rather
+    # than multiplying/dividing. The original `vv_db / vh_db` had no physical
+    # meaning as a ratio at all, and directly dividing two values that
+    # legitimately land close to (but never exactly) zero blew this channel
+    # up to extreme outliers -- measured on real test chips at -1914 to
+    # +5289 after normalization, versus every other channel's roughly
+    # +/-10 to +/-33 range. That numerical garbage is almost certainly why
+    # this channel measured ~0 correlation with the water label (0.0096,
+    # versus VV_db/VH_db's ~-0.55/-0.61) and why every ablation that dropped
+    # it looked harmless -- the model had nothing usable to learn from it in
+    # the first place, so removing it cost nothing. Subtraction has no
+    # zero-denominator failure mode, so the previous guard is gone too.
+    vv_vh_ratio = vv_db - vh_db
 
     return np.stack([vv_db, vh_db, vv_vh_ratio], axis=0)
 

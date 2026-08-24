@@ -297,9 +297,12 @@ def test_speckle_recomputes_ratio_channel_consistently(fixture_root, monkeypatch
 
     # _FLAT_STATS is identity (mean=0, std=1), so channels 0/1 here are
     # the actual post-speckle VV_db/VH_db -- recompute the ratio the same
-    # way data/sen1floods11.py does and confirm channel 2 matches.
+    # way data/sen1floods11.py does (subtraction: both are already
+    # log-domain dB values, so the dB power ratio is VV_db - VH_db, not
+    # VV_db / VH_db -- see that module's _load_s1_image docstring) and
+    # confirm channel 2 matches.
     vv, vh = inputs[0], inputs[1]
-    expected_ratio = vv / torch.where(vh == 0, torch.full_like(vh, 1e-6), vh)
+    expected_ratio = vv - vh
     assert torch.allclose(inputs[2], expected_ratio, atol=1e-4)
 
 

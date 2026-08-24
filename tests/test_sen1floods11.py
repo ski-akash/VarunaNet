@@ -118,7 +118,11 @@ def test_dataset_loads_expected_image_channels(tmp_path):
     assert sample.image.dtype == np.float32
     assert np.allclose(sample.image[0], -10.0)  # VV_db
     assert np.allclose(sample.image[1], -20.0)  # VH_db
-    assert np.allclose(sample.image[2], -10.0 / -20.0)  # VV_VH_ratio
+    # VV_VH_ratio in dB is VV_db - VH_db (subtraction in log space = ratio
+    # in linear power space) -- NOT VV_db / VH_db, which this test used to
+    # assert and which was the actual bug (see data/sen1floods11.py's
+    # _load_s1_image docstring for the real numbers this broke).
+    assert np.allclose(sample.image[2], -10.0 - -20.0)  # VV_VH_ratio
 
 
 def test_dataset_remaps_nodata_label_to_ignore_index(tmp_path):

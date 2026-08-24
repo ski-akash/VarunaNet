@@ -129,14 +129,17 @@ class Sen1Floods11TorchDataset(Dataset):
         # multiply against a noise model. Only VV_db (0) and VH_db (1)
         # are radar measurements -- slope/HAND are terrain, untouched.
         # VV_VH_ratio (2) is recomputed from the now-noisy VV/VH using
-        # data/sen1floods11.py's own formula, so it stays internally
-        # consistent with the channels it's derived from -- otherwise the
-        # model would see a ratio channel computed from clean data
-        # sitting next to VV/VH channels that no longer match it.
+        # data/sen1floods11.py's own formula (VV_db - VH_db -- subtraction,
+        # since both are already log-domain values; see that module's
+        # _load_s1_image docstring for the real bug this used to be and the
+        # numbers it broke), so it stays internally consistent with the
+        # channels it's derived from -- otherwise the model would see a
+        # ratio channel computed from clean data sitting next to VV/VH
+        # channels that no longer match it.
         if self._augment and self._speckle_prob > 0 and random.random() < self._speckle_prob:
             full[0] = apply_speckle_noise(full[0], self._speckle_looks)
             full[1] = apply_speckle_noise(full[1], self._speckle_looks)
-            full[2] = full[0] / np.where(full[1] == 0, 1e-6, full[1])
+            full[2] = full[0] - full[1]
 
         full = apply_normalization(full, self._stats)
 
