@@ -33,6 +33,12 @@ dependencies = [
     # Experiment tracking, offline mode by default -- SLURM compute nodes
     # are often air-gapped (spec section 8).
     "wandb",
+    # Gradient-boosted tree baselines (benchmarks/ml_ensemble.py), alongside
+    # the Random Forest already covered by scikit-learn above. On macOS these
+    # need the OpenMP runtime, which isn't a Python dependency: `brew install
+    # libomp` (see infra/Dockerfile.train for the Linux equivalent).
+    "xgboost",
+    "lightgbm",
 ]
 
 [project.optional-dependencies]
