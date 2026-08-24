@@ -72,7 +72,7 @@ def _tta_probabilities(model: torch.nn.Module, inputs: torch.Tensor, amp_dtype, 
     return total / len(flip_specs)
 
 
-def _predict_chip_metrics(
+def predict_chip_metrics(
     model: torch.nn.Module,
     dataloader,
     device: str,
@@ -129,7 +129,7 @@ def evaluate_test(cfg) -> TestResults:
     threshold = getattr(cfg, "threshold", 0.5)
     tta = getattr(cfg, "tta", False)
 
-    chip_metrics = _predict_chip_metrics(
+    chip_metrics = predict_chip_metrics(
         model, test_dataloader, device, amp_dtype, use_amp, threshold, tta
     )
     return TestResults(pooled=aggregate_metrics(chip_metrics), per_chip=summarize(chip_metrics))
