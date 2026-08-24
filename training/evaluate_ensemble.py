@@ -14,6 +14,11 @@ it doesn't compress each model's confidence into [0, 1] before
 combining, so a model that's very confident isn't discounted by the
 squashing the other approach would apply first.
 
+Reports both pooled and per-chip metrics, same as training/evaluate_test.py
+(reusing its TestResults return shape directly rather than a near-duplicate
+dataclass) -- an ensemble's pooled IoU is the number comparable to every
+other model in this project now that they all report it.
+
 Run directly:
     python -m training.evaluate_ensemble checkpoints=[a.pt,b.pt,c.pt]
 """
@@ -22,9 +27,10 @@ import hydra
 import torch
 from omegaconf import DictConfig
 
-from benchmarks.metrics import MetricSummary, compute_chip_metrics, summarize
+from benchmarks.metrics import ChipMetrics, aggregate_metrics, compute_chip_metrics, summarize
 from models.build_model import build_model
 from training.checkpoint import load_checkpoint
+from training.evaluate_test import TestResults
 from training.train import build_dataloader, resolve_device
 
 
@@ -44,7 +50,7 @@ def _load_ensemble_models(checkpoints, cfg, device) -> list[torch.nn.Module]:
     return models
 
 
-def evaluate_ensemble(cfg) -> MetricSummary:
+def evaluate_ensemble(cfg) -> TestResults:
     device = resolve_device(cfg.device)
     models = _load_ensemble_models(cfg.checkpoints, cfg, device)
 
@@ -55,7 +61,7 @@ def evaluate_ensemble(cfg) -> MetricSummary:
     use_amp = device == "cuda" and cfg.amp_dtype in ("fp16", "bf16")
     amp_dtype = torch.float16 if cfg.amp_dtype == "fp16" else torch.bfloat16
 
-    chip_metrics = []
+    chip_metrics: list[ChipMetrics] = []
     with torch.no_grad():
         for inputs, targets, chip_ids in test_dataloader:
             inputs = inputs.to(device)
@@ -71,17 +77,21 @@ def evaluate_ensemble(cfg) -> MetricSummary:
                 chip_metrics.append(
                     compute_chip_metrics(chip_id, predicted_water[i], targets_np[i])
                 )
-    return summarize(chip_metrics)
+    return TestResults(pooled=aggregate_metrics(chip_metrics), per_chip=summarize(chip_metrics))
 
 
 @hydra.main(config_path="conf", config_name="evaluate_ensemble", version_base=None)
 def main(cfg: DictConfig) -> None:
-    summary = evaluate_ensemble(cfg)
+    results = evaluate_ensemble(cfg)
+    pooled, per_chip = results.pooled, results.per_chip
     print(
-        f"ensemble (logit-averaged, {len(cfg.checkpoints)} checkpoints) test split: "
-        f"mean_iou={summary.mean_iou:.4f} median_iou={summary.median_iou:.4f} "
-        f"mean_f1={summary.mean_f1:.4f} mean_precision={summary.mean_precision:.4f} "
-        f"mean_recall={summary.mean_recall:.4f}"
+        f"ensemble (logit-averaged, {len(cfg.checkpoints)} checkpoints) test split:\n"
+        f"  pooled:   IoU {pooled.iou:.4f}, F1 {pooled.f1:.4f}, "
+        f"precision {pooled.precision:.4f}, recall {pooled.recall:.4f}, "
+        f"OA {pooled.overall_accuracy:.4f}, kappa {pooled.kappa:.4f}\n"
+        f"  per-chip: mean IoU {per_chip.mean_iou:.4f}, median IoU {per_chip.median_iou:.4f}, "
+        f"mean F1 {per_chip.mean_f1:.4f}, mean precision {per_chip.mean_precision:.4f}, "
+        f"mean recall {per_chip.mean_recall:.4f}"
     )
 
 

@@ -45,9 +45,10 @@ def test_evaluate_ensemble_scores_every_chip(tmp_path):
     OmegaConf.set_struct(cfg_a, False)
     cfg_a.checkpoints = [str(ckpt_a_dir / "best.pt"), str(ckpt_b_dir / "best.pt")]
 
-    summary = evaluate_ensemble(cfg_a)
+    results = evaluate_ensemble(cfg_a)
 
-    assert summary.n_chips == cfg_a.dataset.num_samples
+    assert results.per_chip.n_chips == cfg_a.dataset.num_samples
+    assert results.pooled.n_chips == cfg_a.dataset.num_samples
 
 
 def test_ensemble_of_one_matches_single_checkpoint_evaluation(tmp_path):
@@ -67,9 +68,9 @@ def test_ensemble_of_one_matches_single_checkpoint_evaluation(tmp_path):
     single_results = evaluate_test(cfg)
 
     cfg.checkpoints = [checkpoint_path]
-    ensemble_summary = evaluate_ensemble(cfg)
+    ensemble_results = evaluate_ensemble(cfg)
 
-    assert single_results.per_chip.mean_iou == ensemble_summary.mean_iou
+    assert single_results.per_chip.mean_iou == ensemble_results.per_chip.mean_iou
 
 
 def test_logit_averaging_differs_from_naive_probability_averaging(tmp_path):

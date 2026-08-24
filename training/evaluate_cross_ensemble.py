@@ -39,10 +39,10 @@ import hydra
 import torch
 from omegaconf import DictConfig
 
-from benchmarks.metrics import MetricSummary, compute_chip_metrics, summarize
+from benchmarks.metrics import ChipMetrics, aggregate_metrics, compute_chip_metrics, summarize
 from models.build_model import build_model
 from training.checkpoint import load_checkpoint
-from training.evaluate_test import _tta_probabilities
+from training.evaluate_test import TestResults, _tta_probabilities
 from training.train import build_dataloader, resolve_device
 
 
@@ -52,7 +52,7 @@ def _load_ensemble_models(members, device) -> list[torch.nn.Module]:
         model = build_model(
             architecture=member.architecture,
             encoder_name=member.get("encoder_name", "resnet34"),
-            encoder_weights=None,  # loading a trained checkpoint next -- no need to fetch imagenet weights
+            encoder_weights=None,  # a trained checkpoint loads next -- no imagenet fetch needed
             in_channels=member.get("in_channels", 5),
             classes=member.get("classes", 1),
         ).to(device)
@@ -62,7 +62,7 @@ def _load_ensemble_models(members, device) -> list[torch.nn.Module]:
     return models
 
 
-def evaluate_cross_ensemble(cfg) -> MetricSummary:
+def evaluate_cross_ensemble(cfg) -> TestResults:
     device = resolve_device(cfg.device)
     models = _load_ensemble_models(cfg.members, device)
     use_tta = getattr(cfg, "tta", False)
@@ -75,7 +75,7 @@ def evaluate_cross_ensemble(cfg) -> MetricSummary:
     use_amp = device == "cuda" and cfg.amp_dtype in ("fp16", "bf16")
     amp_dtype = torch.float16 if cfg.amp_dtype == "fp16" else torch.bfloat16
 
-    chip_metrics = []
+    chip_metrics: list[ChipMetrics] = []
     with torch.no_grad():
         for inputs, targets, chip_ids in test_dataloader:
             inputs = inputs.to(device)
@@ -95,20 +95,24 @@ def evaluate_cross_ensemble(cfg) -> MetricSummary:
                 chip_metrics.append(
                     compute_chip_metrics(chip_id, predicted_water[i], targets_np[i])
                 )
-    return summarize(chip_metrics)
+    return TestResults(pooled=aggregate_metrics(chip_metrics), per_chip=summarize(chip_metrics))
 
 
 @hydra.main(config_path="conf", config_name="evaluate_cross_ensemble", version_base=None)
 def main(cfg: DictConfig) -> None:
-    summary = evaluate_cross_ensemble(cfg)
+    results = evaluate_cross_ensemble(cfg)
+    pooled, per_chip = results.pooled, results.per_chip
     architectures = ",".join(m.architecture for m in cfg.members)
     combine = "TTA probability-averaged" if getattr(cfg, "tta", False) else "logit-averaged"
     print(
         f"cross-architecture ensemble ({combine}, {len(cfg.members)} checkpoints: "
-        f"{architectures}) test split: "
-        f"mean_iou={summary.mean_iou:.4f} median_iou={summary.median_iou:.4f} "
-        f"mean_f1={summary.mean_f1:.4f} mean_precision={summary.mean_precision:.4f} "
-        f"mean_recall={summary.mean_recall:.4f}"
+        f"{architectures}) test split:\n"
+        f"  pooled:   IoU {pooled.iou:.4f}, F1 {pooled.f1:.4f}, "
+        f"precision {pooled.precision:.4f}, recall {pooled.recall:.4f}, "
+        f"OA {pooled.overall_accuracy:.4f}, kappa {pooled.kappa:.4f}\n"
+        f"  per-chip: mean IoU {per_chip.mean_iou:.4f}, median IoU {per_chip.median_iou:.4f}, "
+        f"mean F1 {per_chip.mean_f1:.4f}, mean precision {per_chip.mean_precision:.4f}, "
+        f"mean recall {per_chip.mean_recall:.4f}"
     )
 
 

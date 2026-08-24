@@ -53,9 +53,10 @@ def test_evaluate_cross_ensemble_scores_every_chip_across_architectures(tmp_path
         {"checkpoint": str(unetpp_dir / "best.pt"), "architecture": "unetplusplus"},
     ]
 
-    summary = evaluate_cross_ensemble(cfg)
+    results = evaluate_cross_ensemble(cfg)
 
-    assert summary.n_chips == cfg.dataset.num_samples
+    assert results.per_chip.n_chips == cfg.dataset.num_samples
+    assert results.pooled.n_chips == cfg.dataset.num_samples
 
 
 def test_evaluate_cross_ensemble_tta_scores_every_chip(tmp_path):
@@ -82,9 +83,10 @@ def test_evaluate_cross_ensemble_tta_scores_every_chip(tmp_path):
         {"checkpoint": str(unetpp_dir / "best.pt"), "architecture": "unetplusplus"},
     ]
 
-    summary = evaluate_cross_ensemble(cfg)
+    results = evaluate_cross_ensemble(cfg)
 
-    assert summary.n_chips == cfg.dataset.num_samples
+    assert results.per_chip.n_chips == cfg.dataset.num_samples
+    assert results.pooled.n_chips == cfg.dataset.num_samples
 
 
 def test_cross_ensemble_of_one_matches_single_checkpoint_evaluation(tmp_path):
@@ -104,6 +106,6 @@ def test_cross_ensemble_of_one_matches_single_checkpoint_evaluation(tmp_path):
     single_results = evaluate_test(cfg)
 
     cfg.members = [{"checkpoint": checkpoint_path, "architecture": "unet"}]
-    cross_summary = evaluate_cross_ensemble(cfg)
+    cross_results = evaluate_cross_ensemble(cfg)
 
-    assert single_results.per_chip.mean_iou == cross_summary.mean_iou
+    assert single_results.per_chip.mean_iou == cross_results.per_chip.mean_iou
