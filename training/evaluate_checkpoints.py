@@ -134,11 +134,22 @@ def _load_model_for_eval(checkpoint_path: Path, device: str) -> tuple[torch.nn.M
     see training/checkpoint.py's _restore_rng_state docstring) for a
     read-only forward pass. encoder_weights=None skips downloading ImageNet
     weights that load_state_dict is about to overwrite anyway.
+
+    model_cfg.get("architecture", "unet"): the earliest checkpoints (job
+    1634 and its sibling seeds) were trained before ModelConfig gained an
+    `architecture` field at all -- confirmed directly against the real
+    checkpoint, not assumed -- back when this project only had one
+    architecture, so every checkpoint missing the key was necessarily a
+    plain U-Net. "unet" is exactly training/config.py's own current default
+    for that field, so this isn't a guess bolted on here, it's applying the
+    same default the dataclass would have applied if the field had existed
+    at training time. Every checkpoint from job 1658 onward (U-Net++
+    onward) carries the field explicitly -- checked directly too.
     """
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model_cfg = checkpoint["config"]["model"]
     model = build_model(
-        architecture=model_cfg["architecture"],
+        architecture=model_cfg.get("architecture", "unet"),
         encoder_name=model_cfg["encoder_name"],
         encoder_weights=None,
         in_channels=model_cfg["in_channels"],
@@ -186,17 +197,31 @@ def evaluate_checkpoint(
             error=f"checkpoint not found: {checkpoint_path}",
         )
 
-    model, config = _load_model_for_eval(checkpoint_path, device)
-    dataset = _build_dataset_for_checkpoint(config, normalization_stats, terrain_cache)
-    dataloader = DataLoader(dataset, batch_size=8, shuffle=False, num_workers=2)
+    # Broad except deliberately: this is a batch sweep over checkpoints
+    # trained across several sessions with slightly different config
+    # schemas (see _load_model_for_eval's docstring on the missing
+    # `architecture` key it already recovered from once). One checkpoint
+    # hitting a config quirk this sweep hasn't seen yet must not crash the
+    # whole run and lose the shared terrain cache -- expensive to rebuild
+    # -- along with every other checkpoint queued behind it. Each failure
+    # is recorded and printed, never silently swallowed.
+    try:
+        model, config = _load_model_for_eval(checkpoint_path, device)
+        dataset = _build_dataset_for_checkpoint(config, normalization_stats, terrain_cache)
+        dataloader = DataLoader(dataset, batch_size=8, shuffle=False, num_workers=2)
 
-    use_amp = device == "cuda"
-    chip_metrics = predict_chip_metrics(
-        model, dataloader, device, torch.bfloat16, use_amp, threshold=0.5, tta=entry.tta
-    )
-    pooled = aggregate_metrics(chip_metrics)
-    per_chip = summarize(chip_metrics)
-    return ScoredCheckpoint(entry, pooled, per_chip, seconds=time.time() - start)
+        use_amp = device == "cuda"
+        chip_metrics = predict_chip_metrics(
+            model, dataloader, device, torch.bfloat16, use_amp, threshold=0.5, tta=entry.tta
+        )
+        pooled = aggregate_metrics(chip_metrics)
+        per_chip = summarize(chip_metrics)
+        return ScoredCheckpoint(entry, pooled, per_chip, seconds=time.time() - start)
+    except Exception as exc:  # noqa: BLE001
+        return ScoredCheckpoint(
+            entry, pooled=None, per_chip=None, seconds=time.time() - start,
+            error=f"{type(exc).__name__}: {exc}",
+        )
 
 
 def run() -> list[ScoredCheckpoint]:
