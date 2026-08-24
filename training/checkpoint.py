@@ -77,9 +77,30 @@ def _capture_rng_state() -> dict:
 
 
 def _restore_rng_state(rng_state: dict) -> None:
-    torch.set_rng_state(rng_state["torch"])
+    """
+    Restore the RNG streams captured by _capture_rng_state.
+
+    The .cpu() calls below are load-bearing, not defensive boilerplate. RNG
+    state is always a CPU-side byte buffer regardless of what device training
+    runs on -- but load_checkpoint's torch.load(..., map_location=device)
+    applies that map_location to EVERY tensor in the checkpoint dict, not just
+    the model weights. On a real GPU run (map_location="cuda"), that silently
+    moves the RNG state tensor onto the GPU too, and torch.set_rng_state
+    rejects anything that isn't a CPU torch.ByteTensor with "RNG state must be
+    a torch.ByteTensor" -- a real crash, confirmed live on an A100 node while
+    running training/evaluate_test.py, not a hypothetical.
+
+    This matters beyond that one script: training/train.py's real resume path
+    calls this same load_checkpoint with map_location=device, so SLURM's
+    --requeue auto-resume (spec section 8's whole point) would hit this exact
+    crash on every GPU run, silently defeating the one thing this project's
+    own resume-exactness tests were built to guarantee. It went uncaught
+    locally because every local test runs on CPU, where map_location="cpu" is
+    already a no-op for tensor placement and the bug never triggers.
+    """
+    torch.set_rng_state(rng_state["torch"].cpu())
     if rng_state["cuda"] is not None and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(rng_state["cuda"])
+        torch.cuda.set_rng_state_all([state.cpu() for state in rng_state["cuda"]])
     np.random.set_state(rng_state["numpy"])
     random.setstate(rng_state["python"])
 
