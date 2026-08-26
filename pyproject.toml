@@ -39,6 +39,17 @@ dependencies = [
     # libomp` (see infra/Dockerfile.train for the Linux equivalent).
     "xgboost",
     "lightgbm",
+    # Phase 5 (serving pipeline, spec section 5): the trained model is
+    # exported to ONNX and served through ONNX Runtime so the inference
+    # service never needs torch. That is the whole point of the split
+    # between infra/Dockerfile.train (CUDA, heavy) and Dockerfile.serve
+    # (slim) -- onnxruntime is a ~50MB wheel against torch's ~2GB tree.
+    # onnxscript is not optional: torch's current exporter imports it, and
+    # without it torch.onnx.export fails with ModuleNotFoundError rather
+    # than anything that points at the real cause.
+    "onnx",
+    "onnxruntime",
+    "onnxscript",
 ]
 
 [project.optional-dependencies]
