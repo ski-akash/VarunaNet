@@ -10,28 +10,36 @@ benchmarked against come in Phase 3+.
 Trained (where applicable) on the official train split, scored on the official test
 split.
 
-| Model | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | n |
-|---|---|---|---|---|---|---|
-| Otsu | 0.304 | 0.177 | 0.425 | 0.455 | 0.584 | 90 |
-| Otsu + HAND | 0.281 | 0.189 | 0.407 | 0.478 | 0.517 | 90 |
-| Random Forest | 0.233 | 0.146 | 0.350 | 0.282 | 0.692 | 90 |
+| Model | Pooled IoU | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | n |
+|---|---|---|---|---|---|---|---|
+| Otsu | 0.479 | 0.304 | 0.177 | 0.425 | 0.455 | 0.584 | 90 |
+| Otsu + HAND | 0.491 | 0.309 | 0.182 | 0.434 | 0.475 | 0.579 | 90 |
+| Random Forest | 0.400 | 0.233 | 0.145 | 0.350 | 0.282 | 0.691 | 90 |
 
 ### Per-event breakdown
 
 | Event | Otsu IoU | Otsu + HAND IoU | Random Forest IoU | n |
 |---|---|---|---|---|
-| Ghana | 0.252 | 0.244 | 0.186 | 11 |
-| India | 0.410 | 0.375 | 0.346 | 14 |
-| Mekong | 0.351 | 0.321 | 0.280 | 6 |
-| Nigeria | 0.284 | 0.267 | 0.258 | 4 |
-| Pakistan | 0.109 | 0.104 | 0.117 | 6 |
-| Paraguay | 0.395 | 0.360 | 0.219 | 14 |
-| Somalia | 0.210 | 0.206 | 0.183 | 6 |
-| Spain | 0.421 | 0.391 | 0.376 | 6 |
-| Sri-Lanka | 0.378 | 0.350 | 0.293 | 9 |
-| USA | 0.146 | 0.137 | 0.113 | 14 |
+| Ghana | 0.252 | 0.252 | 0.186 | 11 |
+| India | 0.410 | 0.433 | 0.346 | 14 |
+| Mekong | 0.351 | 0.351 | 0.279 | 6 |
+| Nigeria | 0.284 | 0.286 | 0.258 | 4 |
+| Pakistan | 0.109 | 0.110 | 0.117 | 6 |
+| Paraguay | 0.395 | 0.397 | 0.218 | 14 |
+| Somalia | 0.210 | 0.211 | 0.183 | 6 |
+| Spain | 0.421 | 0.421 | 0.376 | 6 |
+| Sri-Lanka | 0.378 | 0.380 | 0.293 | 9 |
+| USA | 0.146 | 0.160 | 0.113 | 14 |
 
-**Interpretation:** Otsu has the best mean IoU on the official split. Mean
+**Two IoU columns, and they are not interchangeable.** **Pooled IoU** sums every chip's
+confusion counts and computes the metric once from the total, so every pixel counts
+equally -- this is what Sen1Floods11's published figures and the ~0.72 SOTA refer to, and
+it is the number to quote. **Mean IoU** scores each chip and averages, weighting a tiny
+chip the same as a huge one. The gap is large (Otsu: 0.479 pooled vs
+0.304 per-chip on identical predictions), so a pooled figure must never be
+compared against a per-chip one.
+
+**Interpretation:** Otsu + HAND has the best pooled IoU on the official split. Mean
 and median diverge noticeably for every baseline here (e.g. Otsu's mean sits well above
 its median), which is the signature of a model that does fine on most chips but badly
 on a few outliers -- exactly why this project reports both, not just the mean.
@@ -46,30 +54,30 @@ both train and test, so a model can partly succeed by fitting an event's specifi
 terrain and backscatter rather than truly generalizing to conditions it has never
 seen.
 
-| Model | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | n |
-|---|---|---|---|---|---|---|
-| Otsu | 0.302 | 0.203 | 0.446 | 0.423 | 0.581 | 431 |
-| Otsu + HAND | 0.276 | 0.201 | 0.422 | 0.435 | 0.514 | 431 |
-| Random Forest | 0.206 | 0.114 | 0.331 | 0.251 | 0.676 | 431 |
+| Model | Pooled IoU | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | n |
+|---|---|---|---|---|---|---|---|
+| Otsu | 0.453 | 0.302 | 0.203 | 0.446 | 0.423 | 0.581 | 431 |
+| Otsu + HAND | 0.463 | 0.305 | 0.212 | 0.451 | 0.437 | 0.575 | 431 |
+| Random Forest | 0.330 | 0.206 | 0.113 | 0.331 | 0.251 | 0.676 | 431 |
 
 ### Per-event breakdown
 
 | Event | Otsu IoU | Otsu + HAND IoU | Random Forest IoU | n |
 |---|---|---|---|---|
-| Ghana | 0.255 | 0.251 | 0.142 | 53 |
-| India | 0.326 | 0.297 | 0.258 | 68 |
-| Mekong | 0.558 | 0.494 | 0.433 | 30 |
-| Nigeria | 0.331 | 0.309 | 0.299 | 18 |
-| Pakistan | 0.142 | 0.130 | 0.113 | 28 |
-| Paraguay | 0.358 | 0.329 | 0.198 | 67 |
-| Somalia | 0.118 | 0.115 | 0.104 | 26 |
-| Spain | 0.385 | 0.326 | 0.256 | 30 |
-| Sri-Lanka | 0.314 | 0.287 | 0.236 | 42 |
-| USA | 0.225 | 0.209 | 0.122 | 69 |
+| Ghana | 0.255 | 0.254 | 0.142 | 53 |
+| India | 0.326 | 0.324 | 0.258 | 68 |
+| Mekong | 0.558 | 0.553 | 0.433 | 30 |
+| Nigeria | 0.331 | 0.330 | 0.299 | 18 |
+| Pakistan | 0.142 | 0.143 | 0.113 | 28 |
+| Paraguay | 0.358 | 0.360 | 0.198 | 67 |
+| Somalia | 0.118 | 0.118 | 0.104 | 26 |
+| Spain | 0.385 | 0.386 | 0.256 | 30 |
+| Sri-Lanka | 0.314 | 0.322 | 0.236 | 42 |
+| USA | 0.225 | 0.241 | 0.123 | 69 |
 
-**Interpretation:** Otsu still wins under hold-one-event-out, but its mean IoU
-drops from 0.304 (official split) to 0.302 (unseen-event
-average) -- a generalization gap of 0.002, the real cost of testing
+**Interpretation:** Otsu + HAND still wins under hold-one-event-out, but its pooled IoU
+drops from 0.491 (official split) to 0.463 (unseen-event
+average) -- a generalization gap of 0.028, the real cost of testing
 on an event the model never trained on. Mekong is the easiest event for
 every baseline, even though it never appeared in the official test split -- new
 information this split alone would have missed. Somalia is the hardest event

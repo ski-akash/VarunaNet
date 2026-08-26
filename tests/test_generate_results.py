@@ -22,7 +22,7 @@ from benchmarks.generate_results import (
     render_report,
     run_official_split,
 )
-from benchmarks.metrics import MetricSummary
+from benchmarks.metrics import AggregateMetrics, MetricSummary
 from data.contract import LABEL_NON_WATER, LABEL_WATER
 
 CHIP_SIZE = 9
@@ -50,13 +50,42 @@ def _summary(mean_iou: float, median_iou: float = 0.0, n_chips: int = 1) -> Metr
     )
 
 
+def _pooled(iou: float, n_chips: int = 1) -> AggregateMetrics:
+    return AggregateMetrics(
+        iou=iou,
+        f1=iou,
+        precision=iou,
+        recall=iou,
+        overall_accuracy=iou,
+        kappa=iou,
+        n_chips=n_chips,
+        n_valid_pixels=n_chips * 100,
+    )
+
+
 def test_summary_table_has_a_row_per_baseline():
-    table = _summary_table({"Otsu": _summary(0.2), "Random Forest": _summary(0.3)})
+    table = _summary_table(
+        {"Otsu": _summary(0.2), "Random Forest": _summary(0.3)},
+        {"Otsu": _pooled(0.5), "Random Forest": _pooled(0.6)},
+    )
 
     assert "| Otsu |" in table
     assert "| Random Forest |" in table
     assert "0.200" in table
     assert "0.300" in table
+
+
+def test_summary_table_reports_pooled_iou_alongside_the_per_chip_mean():
+    """
+    Guards the regression this column exists to fix: RESULTS.md previously
+    carried per-chip means only, so the project's headline metric was not
+    written down anywhere a reader could find it.
+    """
+    table = _summary_table({"Otsu": _summary(0.304)}, {"Otsu": _pooled(0.479)})
+
+    assert "Pooled IoU" in table
+    assert "0.479" in table  # pooled
+    assert "0.304" in table  # per-chip, still present
 
 
 def test_per_event_table_marks_missing_events_with_a_dash():
@@ -73,14 +102,17 @@ def test_per_event_table_marks_missing_events_with_a_dash():
     assert "-" in india_row  # Random Forest has no India entry
 
 
-def test_best_baseline_picks_highest_mean_iou():
-    summaries = {
-        "Otsu": _summary(0.2),
-        "Random Forest": _summary(0.3),
-        "Otsu + HAND": _summary(0.1),
+def test_best_baseline_picks_highest_pooled_iou():
+    # Deliberately ordered so the per-chip mean would pick a different
+    # winner than pooled IoU does -- the ranking must follow the headline
+    # (pooled) metric, not the per-chip one.
+    pooled = {
+        "Otsu": _pooled(0.60),
+        "Random Forest": _pooled(0.40),
+        "Otsu + HAND": _pooled(0.65),
     }
 
-    assert _best_baseline(summaries) == "Random Forest"
+    assert _best_baseline(pooled) == "Otsu + HAND"
 
 
 def test_hardest_and_easiest_events_by_mean_iou():
@@ -128,9 +160,12 @@ def test_render_report_includes_both_sections_and_baseline_names():
     }
     per_event = {name: {"Ghana": _summary(0.2, n_chips=10)} for name in summaries}
 
-    report = render_report(summaries, per_event, summaries, per_event)
+    pooled = {name: _pooled(0.5, n_chips=10) for name in summaries}
+
+    report = render_report(summaries, per_event, summaries, per_event, pooled, pooled)
 
     assert "# Benchmark Results" in report
+    assert "Pooled IoU" in report
     assert "Official train/val/test split" in report
     assert "Hold-one-event-out cross-validation" in report
     assert "Random Forest" in report

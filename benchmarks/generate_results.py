@@ -25,7 +25,14 @@ from benchmarks.evaluate import (
     train_random_forest_baseline,
 )
 from benchmarks.hold_one_event_out import run_hold_one_event_out
-from benchmarks.metrics import ChipMetrics, MetricSummary, summarize, summarize_per_event
+from benchmarks.metrics import (
+    AggregateMetrics,
+    ChipMetrics,
+    MetricSummary,
+    aggregate_metrics,
+    summarize,
+    summarize_per_event,
+)
 from data.sen1floods11 import Sen1Floods11Dataset
 
 
@@ -60,12 +67,33 @@ def run_official_split(
     return results
 
 
-def _summary_table(summaries: dict[str, MetricSummary]) -> str:
-    header = "| Model | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | n |"
-    separator = "|---|---|---|---|---|---|---|"
+def _summary_table(
+    summaries: dict[str, MetricSummary], pooled: dict[str, AggregateMetrics]
+) -> str:
+    """
+    Pooled IoU comes first because it is the headline number -- the one
+    comparable to Sen1Floods11's published figures -- and `pooled` is a
+    required argument rather than an optional extra so that a report
+    simply cannot be generated without it. It used to be missing entirely:
+    this file only ever called summarize(), so RESULTS.md carried per-chip
+    means alone and every pooled figure the project quoted lived in
+    stdout, in prose, or in a comment inside a job script. That is how the
+    same numbers ended up being re-derived and argued over repeatedly.
+
+    The two columns are far apart (Otsu: 0.479 pooled vs 0.304 per-chip on
+    identical predictions) because pooling sums every chip's confusion
+    counts before computing the metric, so each pixel counts equally,
+    while the per-chip mean gives a tiny chip the same weight as a large
+    one. Neither is wrong; mixing them in one comparison is.
+    """
+    header = (
+        "| Model | Pooled IoU | Mean IoU | Median IoU | Mean F1 "
+        "| Mean Precision | Mean Recall | n |"
+    )
+    separator = "|---|---|---|---|---|---|---|---|"
     rows = [
-        f"| {name} | {s.mean_iou:.3f} | {s.median_iou:.3f} | {s.mean_f1:.3f} "
-        f"| {s.mean_precision:.3f} | {s.mean_recall:.3f} | {s.n_chips} |"
+        f"| {name} | {pooled[name].iou:.3f} | {s.mean_iou:.3f} | {s.median_iou:.3f} "
+        f"| {s.mean_f1:.3f} | {s.mean_precision:.3f} | {s.mean_recall:.3f} | {s.n_chips} |"
         for name, s in summaries.items()
     ]
     return "\n".join([header, separator, *rows])
@@ -91,8 +119,11 @@ def _per_event_table(per_baseline_events: dict[str, dict[str, MetricSummary]]) -
     return "\n".join([header, separator, *rows])
 
 
-def _best_baseline(summaries: dict[str, MetricSummary]) -> str:
-    return max(summaries, key=lambda name: summaries[name].mean_iou)
+def _best_baseline(pooled: dict[str, AggregateMetrics]) -> str:
+    # Ranked on pooled IoU, the headline metric. Ranking on the per-chip
+    # mean can genuinely disagree: Otsu+HAND's NaN-abstain fix helps large
+    # water bodies most, which pooling rewards and a per-chip mean dilutes.
+    return max(pooled, key=lambda name: pooled[name].iou)
 
 
 def _hardest_and_easiest_events(per_event: dict[str, MetricSummary]) -> tuple[str, str]:
@@ -126,16 +157,26 @@ def render_report(
     official_per_event: dict[str, dict[str, MetricSummary]],
     hoeo_summaries: dict[str, MetricSummary],
     hoeo_per_event: dict[str, dict[str, MetricSummary]],
+    official_pooled: dict[str, AggregateMetrics],
+    hoeo_pooled: dict[str, AggregateMetrics],
 ) -> str:
-    best_official = _best_baseline(official_summaries)
-    best_hoeo = _best_baseline(hoeo_summaries)
+    best_official = _best_baseline(official_pooled)
+    best_hoeo = _best_baseline(hoeo_pooled)
     hardest_event, easiest_event = _hardest_and_easiest_events(hoeo_per_event[best_hoeo])
     hardest_scope = _describe_extreme_event(hardest_event, hoeo_per_event, pick_hardest=True)
     easiest_scope = _describe_extreme_event(easiest_event, hoeo_per_event, pick_hardest=False)
 
-    official_mean = official_summaries[best_hoeo].mean_iou
-    hoeo_mean = hoeo_summaries[best_hoeo].mean_iou
+    # Gap measured on pooled IoU, matching the headline column.
+    official_mean = official_pooled[best_hoeo].iou
+    hoeo_mean = hoeo_pooled[best_hoeo].iou
     generalization_gap = official_mean - hoeo_mean
+
+    # Quoted in the explanation of the two columns below. Taken from the
+    # report's own numbers rather than hard-coded, so the illustration
+    # cannot drift away from the table it is describing.
+    otsu_key = "Otsu" if "Otsu" in official_pooled else best_official
+    otsu_pooled = official_pooled[otsu_key].iou
+    otsu_per_chip = official_summaries[otsu_key].mean_iou
 
     return f"""# Benchmark Results
 
@@ -149,13 +190,21 @@ benchmarked against come in Phase 3+.
 Trained (where applicable) on the official train split, scored on the official test
 split.
 
-{_summary_table(official_summaries)}
+{_summary_table(official_summaries, official_pooled)}
 
 ### Per-event breakdown
 
 {_per_event_table(official_per_event)}
 
-**Interpretation:** {best_official} has the best mean IoU on the official split. Mean
+**Two IoU columns, and they are not interchangeable.** **Pooled IoU** sums every chip's
+confusion counts and computes the metric once from the total, so every pixel counts
+equally -- this is what Sen1Floods11's published figures and the ~0.72 SOTA refer to, and
+it is the number to quote. **Mean IoU** scores each chip and averages, weighting a tiny
+chip the same as a huge one. The gap is large (Otsu: {otsu_pooled:.3f} pooled vs
+{otsu_per_chip:.3f} per-chip on identical predictions), so a pooled figure must never be
+compared against a per-chip one.
+
+**Interpretation:** {best_official} has the best pooled IoU on the official split. Mean
 and median diverge noticeably for every baseline here (e.g. Otsu's mean sits well above
 its median), which is the signature of a model that does fine on most chips but badly
 on a few outliers -- exactly why this project reports both, not just the mean.
@@ -170,13 +219,13 @@ both train and test, so a model can partly succeed by fitting an event's specifi
 terrain and backscatter rather than truly generalizing to conditions it has never
 seen.
 
-{_summary_table(hoeo_summaries)}
+{_summary_table(hoeo_summaries, hoeo_pooled)}
 
 ### Per-event breakdown
 
 {_per_event_table(hoeo_per_event)}
 
-**Interpretation:** {best_hoeo} still wins under hold-one-event-out, but its mean IoU
+**Interpretation:** {best_hoeo} still wins under hold-one-event-out, but its pooled IoU
 drops from {official_mean:.3f} (official split) to {hoeo_mean:.3f} (unseen-event
 average) -- a generalization gap of {generalization_gap:.3f}, the real cost of testing
 on an event the model never trained on. {easiest_event} is the easiest event for
@@ -196,14 +245,23 @@ if __name__ == "__main__":
     print("Running official train/val/test split evaluation...")
     official_results = run_official_split(IMAGE_DIR, LABEL_DIR, DEM_DIR, SPLITS_DIR)
     official_summaries = {name: summarize(m) for name, m in official_results.items()}
+    official_pooled = {name: aggregate_metrics(m) for name, m in official_results.items()}
     official_per_event = {name: summarize_per_event(m) for name, m in official_results.items()}
 
     print("Running hold-one-event-out cross-validation...")
     hoeo_results = run_hold_one_event_out(IMAGE_DIR, LABEL_DIR, DEM_DIR, SPLITS_DIR)
     hoeo_summaries = {name: summarize(m) for name, m in hoeo_results.items()}
+    hoeo_pooled = {name: aggregate_metrics(m) for name, m in hoeo_results.items()}
     hoeo_per_event = {name: summarize_per_event(m) for name, m in hoeo_results.items()}
 
-    report = render_report(official_summaries, official_per_event, hoeo_summaries, hoeo_per_event)
+    report = render_report(
+        official_summaries,
+        official_per_event,
+        hoeo_summaries,
+        hoeo_per_event,
+        official_pooled,
+        hoeo_pooled,
+    )
     output_path = Path("benchmarks/RESULTS.md")
     output_path.write_text(report)
     print(f"Wrote {output_path}")
