@@ -20,15 +20,26 @@ const require = createRequire(import.meta.url)
 // resolve. Kept as a local plugin rather than adding a copy-plugin
 // dependency for one file.
 function emitMaplibreWorker(): Plugin {
+  // Both files, not just the worker: maplibre-gl-worker.mjs does
+  // `from "./maplibre-gl-shared.mjs"`, so shipping the worker alone gets
+  // it a 404 on its own import and it still never starts. (Shipping only
+  // the worker is exactly how this was first "fixed" -- the worker then
+  // loaded, which looked like progress, while the map stayed just as
+  // blank.) maplibre-gl-shared.mjs imports nothing further, so these two
+  // close the chain.
+  const WORKER_FILES = ['maplibre-gl-worker.mjs', 'maplibre-gl-shared.mjs']
+
   return {
     name: 'emit-maplibre-worker',
     apply: 'build',
     generateBundle() {
-      this.emitFile({
-        type: 'asset',
-        fileName: 'assets/maplibre-gl-worker.mjs',
-        source: readFileSync(require.resolve('maplibre-gl/dist/maplibre-gl-worker.mjs')),
-      })
+      for (const file of WORKER_FILES) {
+        this.emitFile({
+          type: 'asset',
+          fileName: `assets/${file}`,
+          source: readFileSync(require.resolve(`maplibre-gl/dist/${file}`)),
+        })
+      }
     },
   }
 }
