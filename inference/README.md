@@ -84,3 +84,36 @@ Two deliberate choices:
 Dynamic rather than static quantization: static is more accurate but needs a calibration
 dataset, making it a data-dependent build step. Whether dynamic's accuracy cost is
 acceptable is what the table above answers.
+
+**`streaming.py`** — full-scene inference without holding the scene.
+
+`tiling.predict_scene` takes an in-memory array and accumulates scene-sized float64
+buffers. For a real 25,000 x 16,000 scene that is:
+
+| | In-memory | Streaming |
+|---|---|---|
+| Input | 8.00 GB | one 512x512 tile at a time |
+| Stitch accumulators | 6.40 GB | **131 MB** |
+| Peak | **~14.4 GB** | bounded, independent of scene height |
+
+14.4 GB is more than the serving container will have, so the in-memory path is fine for
+a subset and unusable for the thing the service exists to do.
+
+The observation that makes it work: tiles are laid out in rows, so once the next row of
+tiles starts below row R, no future tile can touch anything above R. Those rows are final
+— threshold them, hand them to the writer, drop them. Only a band of `tile_size` rows is
+ever live, and the accumulators stop depending on scene height entirely.
+
+The reader and writer are callables, not rasterio handles, so the streaming logic is
+testable without raster fixtures and a caller can back it with a local GeoTIFF, a COG, or
+object storage without this module knowing.
+
+**Verified to produce byte-identical output to the in-memory path** across scenes that
+are exact tile multiples, scenes that are not, a single-tile scene, and a very wide one.
+That equivalence is the test that matters: the design rests on "rows above the next tile
+row can never change again", and an off-by-one there produces a horizontal seam every
+tile row — plausible enough at a glance to ship unnoticed.
+
+(The measured saving on a small test scene is only ~1.5x, because the test harness's
+`collect_bands` assembles the whole mask in memory, which is exactly what streaming
+exists to avoid. The saving scales with scene height; the table above is the real case.)
