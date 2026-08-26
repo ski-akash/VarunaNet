@@ -145,3 +145,43 @@ pixel count — the ~3% difference being exactly the specks and simplification.
 
 Holes are preserved: a dry patch inside a flooded area is real information, and dropping
 interiors would systematically overstate flood extent.
+
+**`districts.py`** — aggregates flood polygons to districts, which is the form every
+question is actually asked in. Nobody asks about geometry; they ask "which districts are
+worst hit this week".
+
+Reuses `frontend/public/geo/assam_districts.geojson`, the same file the map draws, so the
+dashboard's boundaries and the reported statistics can never disagree about where a
+district is.
+
+**Ranked by share of the district, not absolute area.** Assam's districts differ in size
+by more than 10x, so ranking by flooded km² mostly reproduces a ranking of district size.
+On a synthetic Brahmaputra-valley flood band:
+
+| District | Flooded | % of district |
+|---|---|---|
+| Kamrup Metropolitan | 87,601 ha | **72.6%** |
+| Marigaon | 111,689 ha | 72.2% |
+| Barpeta | 127,086 ha | 55.0% |
+| Nagaon | 144,372 ha | 36.2% |
+
+Nagaon has the most flooded hectares of any district and is only sixth worst affected. A
+small district most of the way under water is the emergency.
+
+Other deliberate choices:
+
+- **Real intersections, not centroid or bbox tests.** Floods follow river courses and
+  routinely straddle several districts; anything coarser assigns a whole flood to one
+  district and reports zero for its neighbours.
+- **Flood polygons are unioned first**, so overlapping polygons cannot double-count the
+  same ground.
+- **Untouched districts are reported as zero, not omitted.** "Dhemaji is not flooded" is a
+  real answer, and a list that drops dry districts cannot distinguish them from districts
+  the scene never covered.
+- **Geodesic areas**, for the same reason as `vectorize.py`. Validated against reality:
+  the 27 districts sum to **78,470 km²** against Assam's actual **78,438 km²**, and
+  Karbi Anglong comes out as the largest district, which it is.
+
+`summarize()` returns a compact JSON payload — the shape an API response or a grounded
+LLM tool call would return, where every figure traces to a computed value rather than a
+model's recollection (spec section 6.1).
