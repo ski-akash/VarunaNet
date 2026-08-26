@@ -117,3 +117,31 @@ tile row — plausible enough at a glance to ship unnoticed.
 (The measured saving on a small test scene is only ~1.5x, because the test harness's
 `collect_bands` assembles the whole mask in memory, which is exactly what streaming
 exists to avoid. The saving scales with scene height; the table above is the real case.)
+
+**`vectorize.py`** — pixel mask to georeferenced polygons, which is what the database and
+map actually consume. The dashboard never queries pixels: answering "how much of Nagaon is
+flooded" against a raster means rasterizing district boundaries and counting per query,
+whereas against polygons in PostGIS it is one spatial join.
+
+Three steps, and the last two are why this is not a one-line call to
+`rasterio.features.shapes`:
+
+- **Drop specks.** A real SAR mask contains thousands of isolated one- and two-pixel
+  blobs. Filtered by real area (default 1 ha), not pixel count, so the threshold means the
+  same thing at any resolution.
+- **Simplify.** Traced polygons follow pixel edges, so every boundary is a staircase with
+  a vertex every 10m. Tolerance is half a pixel, with `preserve_topology` so simplification
+  cannot produce the self-intersecting rings PostGIS rejects on insert.
+- **Areas are geodesic on a geographic CRS.** Sen1Floods11 chips are EPSG:4326, so the
+  affine is in *degrees*. Taking its determinant as an area gives ~8e-09 per pixel, every
+  polygon falls under any sane threshold, and the scene silently reports zero flooding.
+  That is not hypothetical — the first real-chip run produced **0.0 hectares from a scene
+  77.6% covered in predicted water**, all 14 regions discarded as specks. The CRS is now
+  inspected and geographic scenes get true ellipsoidal areas via pyproj.
+
+Verified end to end on `Mekong_1443339` (73.5% water by label) through the INT8 model:
+**19.75 km² across 3 polygons**, 11 specks dropped, against ~20.34 km² implied by the raw
+pixel count — the ~3% difference being exactly the specks and simplification.
+
+Holes are preserved: a dry patch inside a flooded area is real information, and dropping
+interiors would systematically overstate flood extent.

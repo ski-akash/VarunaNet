@@ -50,6 +50,15 @@ dependencies = [
     "onnx",
     "onnxruntime",
     "onnxscript",
+    # Vectorizing the flood mask to polygons for PostGIS
+    # (inference/vectorize.py). shapely does the geometry; pyproj computes
+    # true ellipsoidal areas, which is not optional -- Sen1Floods11 chips
+    # are EPSG:4326, so a planar area on them is in square degrees and a
+    # fully flooded scene reports zero hectares. pyproj arrives as a
+    # rasterio dependency but is listed explicitly because this project
+    # imports it directly.
+    "shapely",
+    "pyproj",
 ]
 
 [project.optional-dependencies]
