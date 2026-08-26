@@ -7,9 +7,11 @@ import './App.css'
 
 // Top-level dashboard shell (spec section 7): a header bar, the map view
 // with a time slider beneath it, the chat panel docked beside both, and
-// a report viewer triggered from whichever state is currently selected.
+// a report viewer triggered from whichever district is currently selected.
+// The selection is a district, not a state: the map covers Assam only, so
+// the state is fixed and picking one would be a choice of exactly one.
 function App() {
-  const [selectedState, setSelectedState] = useState<string | null>(null)
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null)
   const [isReportOpen, setReportOpen] = useState(false)
 
   return (
@@ -20,21 +22,21 @@ function App() {
         <button
           type="button"
           className="generate-report-button"
-          disabled={selectedState === null}
+          disabled={selectedDistrict === null}
           onClick={() => setReportOpen(true)}
         >
-          {selectedState === null ? 'Select a state for a report' : `Report: ${selectedState}`}
+          {selectedDistrict === null ? 'Select a district for a report' : `Report: ${selectedDistrict}`}
         </button>
       </header>
       <main className="app-main">
         <div className="map-column">
-          <MapView onSelectionChange={setSelectedState} />
+          <MapView onSelectionChange={setSelectedDistrict} />
           <TimeSlider />
         </div>
         <ChatPanel />
       </main>
-      {isReportOpen && selectedState !== null && (
-        <ReportViewer stateName={selectedState} onClose={() => setReportOpen(false)} />
+      {isReportOpen && selectedDistrict !== null && (
+        <ReportViewer stateName={selectedDistrict} onClose={() => setReportOpen(false)} />
       )}
     </div>
   )

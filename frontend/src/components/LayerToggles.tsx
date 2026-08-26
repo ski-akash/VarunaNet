@@ -1,25 +1,15 @@
-export interface LayerToggleState {
-  countryBorders: boolean
-  stateBorders: boolean
-  districtBorders: boolean
-}
-
-interface LayerTogglesProps {
-  value: LayerToggleState
-  onChange: (next: LayerToggleState) => void
-}
-
-// Spec section 7's full layer list: flood extent, permanent water,
-// confidence heatmap, SAR backscatter, admin boundaries. Only "admin
-// boundaries" (split here into state/district borders, since they're
-// independently useful) is backed by real data right now -- the other
-// four need actual model output that doesn't exist yet (Phase 5). They're
-// listed and visibly disabled rather than omitted, so the panel shows the
-// real planned structure, but a disabled control that can't be toggled is
-// the honest way to represent "this exists as a concept, not as data" --
-// building working-looking toggles for data that isn't real would imply
-// something is there when it isn't, the same principle spec section 6.1
-// applies to the AI layer's grounding rule.
+// Spec section 7's layer list: flood extent, permanent water, confidence
+// heatmap, SAR backscatter. Each one needs real model output that doesn't
+// exist yet (Phase 5), so all four are listed and visibly disabled rather
+// than omitted -- the panel shows the real planned structure, and a
+// disabled control that can't be toggled is the honest way to represent
+// "this exists as a concept, not as data". Building working-looking
+// toggles for data that isn't real would imply something is there when it
+// isn't, the same principle spec section 6.1 applies to the AI layer.
+//
+// The state outline and district boundaries used to be toggleable here.
+// They aren't any more: they are the entire map, and a control whose only
+// purpose is to hide the subject of the page isn't a real choice.
 const UPCOMING_LAYERS = [
   'Flood extent',
   'Permanent water',
@@ -27,34 +17,10 @@ const UPCOMING_LAYERS = [
   'SAR backscatter',
 ] as const
 
-export default function LayerToggles({ value, onChange }: LayerTogglesProps) {
+export default function LayerToggles() {
   return (
     <div className="layer-toggles">
       <span className="layer-toggles-heading">Layers</span>
-      <label className="layer-toggle">
-        <input
-          type="checkbox"
-          checked={value.countryBorders}
-          onChange={(event) => onChange({ ...value, countryBorders: event.target.checked })}
-        />
-        Country boundaries
-      </label>
-      <label className="layer-toggle">
-        <input
-          type="checkbox"
-          checked={value.stateBorders}
-          onChange={(event) => onChange({ ...value, stateBorders: event.target.checked })}
-        />
-        State boundaries
-      </label>
-      <label className="layer-toggle">
-        <input
-          type="checkbox"
-          checked={value.districtBorders}
-          onChange={(event) => onChange({ ...value, districtBorders: event.target.checked })}
-        />
-        District boundaries
-      </label>
       {UPCOMING_LAYERS.map((name) => (
         <label key={name} className="layer-toggle layer-toggle-disabled" title="No data yet">
           <input type="checkbox" checked={false} disabled />

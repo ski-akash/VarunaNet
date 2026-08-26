@@ -379,7 +379,13 @@
 
 .severity-legend {
   position: absolute;
-  bottom: 12px;
+  /* Lifted clear of the map's bottom-right corner, which MapLibre's
+     attribution control occupies. Both sat at bottom 12px and the
+     attribution's (i) button landed on top of the "Danger" tick label.
+     The legend moves rather than the attribution: the attribution must
+     stay visible for the CC BY 4.0 boundary data, and MapLibre positions
+     its controls by corner, not by pixel offset. */
+  bottom: 46px;
   right: 12px;
   z-index: 1;
   width: 150px;
