@@ -31,3 +31,4 @@ checkpoints/
 
 # Hydra's default per-run output directory.
 outputs/
+.vercel
