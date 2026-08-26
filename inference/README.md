@@ -28,3 +28,31 @@ file, and verifies it. Three things it does that a bare `torch.onnx.export` call
 
 Measured on U-Net++ (job 2218): a 313MB checkpoint becomes a 105MB ONNX file — the
 checkpoint also carries optimizer and scheduler state that serving has no use for.
+
+
+**`tiling.py`** — turns the model into a scene-level prediction. Splits a scene into
+overlapping 512x512 tiles, batches them through an ONNX session, and stitches the
+per-tile logits back into one scene-sized mask.
+
+The interesting parts are all at the joins:
+
+- **Tiles overlap** (128px by default). A conv model has far less context at a tile's
+  edge than its centre -- the receptive field runs off the end into padding rather than
+  neighbouring water -- so predictions are systematically worse near borders. Butt-jointed
+  tiles put those weak edges against each other and produce a visible grid of seams.
+- **A tapered blend, not a plain average.** Each tile's contribution is weighted by a map
+  peaking at its centre, so wherever tiles overlap the one that can see the most context
+  dominates. Weights are accumulated alongside the logits and divided out, giving a
+  weighted mean.
+- **Blending happens on logits, then thresholds once.** Averaging binary masks throws away
+  confidence and leaves ragged half-committed boundaries -- the same reasoning as
+  logit-averaged ensembling in `training/evaluate_ensemble.py`.
+- **The last tile is pulled flush with the scene edge** rather than padding or leaving a
+  strip unpredicted. Scene dimensions are essentially never a multiple of 512, so this is
+  the normal case.
+
+Measured end to end with the real U-Net++ export on this project's dev machine (CPU,
+ONNX Runtime): **~1.0 s per 512x512 tile**, which extrapolates to roughly **an hour for a
+full 25,000 x 16,000 scene**. That is the number the FP16/INT8 quantization work in spec
+section 5 has to improve on, and it is why the pipeline is queued (BullMQ) rather than
+synchronous.
