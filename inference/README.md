@@ -56,3 +56,31 @@ ONNX Runtime): **~1.0 s per 512x512 tile**, which extrapolates to roughly **an h
 full 25,000 x 16,000 scene**. That is the number the FP16/INT8 quantization work in spec
 section 5 has to improve on, and it is why the pipeline is queued (BullMQ) rather than
 synchronous.
+
+**`quantize.py`** — dynamic INT8 quantization, measured rather than asserted.
+
+Measured on the real U-Net++ export against **16 real Sen1Floods11 test chips**
+(CPU, ONNX Runtime):
+
+| | Size | Latency | Mask pixels changed |
+|---|---|---|---|
+| FP32 | 104.7 MB | 1208.6 ms/tile | — |
+| INT8 | 26.4 MB | 708.1 ms/tile | 0.258% |
+
+**3.96x smaller, 1.71x faster**, and pooled IoU over those chips moves 0.5540 -> 0.5563 —
+within noise, and if anything slightly up. For a serving path that is a clear win: a full
+25,000 x 16,000 scene drops from roughly an hour to about 35 minutes on CPU.
+
+Two deliberate choices:
+
+- **The accuracy metric is disagreement on the thresholded mask**, not MSE on logits.
+  What ships is a water/not-water decision; a logit moving 4.1 -> 4.0 changes nothing
+  while one crossing zero flips a pixel, and MSE averages those together.
+- **Benchmarked on real chips, never random noise.** Random input reported *2.80x faster
+  and 0.135% pixels changed* for the same pair of models — overstating the speedup and
+  understating the damage simultaneously. Dynamic quantization keys off activation
+  ranges, and random noise has none of SAR's actual distribution.
+
+Dynamic rather than static quantization: static is more accurate but needs a calibration
+dataset, making it a data-dependent build step. Whether dynamic's accuracy cost is
+acceptable is what the table above answers.
