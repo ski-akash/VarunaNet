@@ -185,3 +185,48 @@ Other deliberate choices:
 `summarize()` returns a compact JSON payload — the shape an API response or a grounded
 LLM tool call would return, where every figure traces to a computed value rather than a
 model's recollection (spec section 6.1).
+
+**`pipeline.py`** — the seam between the stages: scene in, district statistics out.
+
+Each stage is tested on its own; this module exists because the *joins* are where the
+units, the coordinate reference and the shapes have to agree, and where they historically
+did not. The transform and CRS have to travel all the way from the raster to
+`vectorize_mask`, or areas come out in square degrees and a flooded scene reports zero
+hectares without raising. Expressing that once, here, is safer than each caller
+reassembling it.
+
+Verified end to end on a real Sen1Floods11 chip over Assam:
+
+```json
+{
+ "scene_id": "India_900498",
+ "model": "unetpp_2218.int8.onnx",
+ "water_pixel_fraction": 0.540615,
+ "flood_polygons": 6,
+ "specks_dropped": 42,
+ "districts_total": 27,
+ "districts_affected": 1,
+ "total_flooded_hectares": 1251.4,
+ "worst_affected": [
+  {"name": "Golaghat", "flooded_hectares": 1251.4, "flooded_percent": 0.37}
+ ]
+}
+```
+
+The chip covers 93.74-93.78E, 26.72-26.77N, which is in Golaghat on the Brahmaputra — so
+the district attribution is independently checkable against the coordinates, not just
+self-consistent.
+
+Two deliberate constraints:
+
+- **It does not normalize.** The statistics must be the ones the model trained with;
+  silently applying a different set is exactly the train/serve mismatch that made every
+  pre-ratio-fix evaluation meaningless.
+- **Provenance travels with the figures.** Scene id, model filename and a UTC-aware
+  timestamp are in the same payload as the numbers, so a figure quoted by the LLM layer is
+  checkable rather than merely plausible (spec section 6.1).
+
+`run_pipeline_on_mask` covers the half after inference, for masks from the streaming path
+or read back from a stored raster — so a scene can be re-aggregated (new district
+boundaries, a different speck threshold) without re-running the model. Tests pin that both
+paths produce identical district numbers.
