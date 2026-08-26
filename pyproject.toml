@@ -59,6 +59,12 @@ dependencies = [
     # imports it directly.
     "shapely",
     "pyproj",
+    # The inference service itself (inference/service.py). uvicorn is the
+    # ASGI server the container runs; httpx backs fastapi's TestClient, so
+    # the HTTP surface can be tested without binding a port.
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
 ]
 
 [project.optional-dependencies]

@@ -230,3 +230,48 @@ Two deliberate constraints:
 or read back from a stored raster — so a scene can be re-aggregated (new district
 boundaries, a different speck threshold) without re-running the model. Tests pin that both
 paths produce identical district numbers.
+
+**`service.py`** — the FastAPI service the Node gateway calls. Deliberately thin: it owns
+the model session, validates input, and delegates to `pipeline.py`, so the interesting
+logic stays testable without HTTP.
+
+```
+GET  /health   -> {"status": "ok", "model": "unetpp_2218.int8.onnx", ...}
+POST /predict  -> {"scene_id": ..., "worst_affected": [...], ...}
+```
+
+Verified live against the real INT8 model and a real staged Assam scene — **0.69s** from
+request to district answer, identical to the offline pipeline:
+
+```json
+{"scene_id": "India_900498", "water_pixel_fraction": 0.540615,
+ "flood_polygons": 6, "specks_dropped": 42, "districts_affected": 1,
+ "total_flooded_hectares": 1251.4,
+ "worst_affected": [{"name": "Golaghat", "flooded_percent": 0.37}]}
+```
+
+Design decisions worth stating:
+
+- **The model loads once at startup**, via a lifespan handler. An ONNX session takes
+  seconds to build and the forward pass is ~700ms/tile, so per-request loading would
+  dominate. It also means a missing model fails at boot rather than on a user's first
+  request.
+- **Scenes are never posted over HTTP.** A real scene is ~8GB as float32. The request
+  carries a *reference* to a scene the ingest worker has staged; the service reads it
+  locally.
+- **`/health` distinguishes running from ready.** Returning ok from a service with no
+  model keeps a broken instance in the load balancer, which is worse than no health check.
+- **Missing model is 503, not 500** — correctly built but not ready is retryable, and a
+  500 does not tell the caller that.
+- **`scene_id` is resolved against the scene root and checked for containment.** It
+  arrives over HTTP, so `../../../etc/passwd` is a request that will eventually be made;
+  resolving both sides is the check that holds, not blacklisting `..`.
+- **Geometry is opt-in.** One chip's GeoJSON is ~150KB and a scene's is far larger, so
+  the map fetches it separately rather than every caller paying for it.
+
+Run it:
+
+```
+VARUNANET_MODEL_PATH=model.int8.onnx VARUNANET_SCENE_ROOT=/scenes \
+  uvicorn inference.service:app
+```
