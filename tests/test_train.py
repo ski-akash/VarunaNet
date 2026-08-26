@@ -121,13 +121,37 @@ def test_run_training_completes_and_reports_progress(tmp_path):
 
 
 def test_checkpoints_saved_at_expected_steps(tmp_path):
-    cfg = _tiny_cfg(tmp_path, epochs=3, checkpoint_every_steps=2)  # 2 steps/epoch -> 6 total
+    # keep_last_checkpoints=0 disables pruning, so this still asserts the
+    # save *schedule* rather than what survives retention -- the pruning
+    # behaviour is covered separately below.
+    cfg = _tiny_cfg(
+        tmp_path, epochs=3, checkpoint_every_steps=2, keep_last_checkpoints=0
+    )  # 2 steps/epoch -> 6 total
 
     run_training(cfg)
 
     assert (tmp_path / "step_2.pt").exists()
     assert (tmp_path / "step_4.pt").exists()
     assert (tmp_path / "step_6.pt").exists()  # final step, saved even without an exact multiple
+
+
+def test_only_the_last_n_step_checkpoints_are_kept(tmp_path):
+    """
+    Unbounded step snapshots are what exhausted the cluster home quota, and
+    an exhausted quota truncates later checkpoint writes to 0 bytes without
+    raising -- so a run's own retention is the thing standing between a
+    long sweep and silently empty checkpoints (see error.md entry 30).
+    """
+    cfg = _tiny_cfg(
+        tmp_path, epochs=3, checkpoint_every_steps=2, keep_last_checkpoints=2
+    )  # saves at steps 2, 4, 6
+
+    run_training(cfg)
+
+    assert not (tmp_path / "step_2.pt").exists()  # pruned
+    assert (tmp_path / "step_4.pt").exists()
+    assert (tmp_path / "step_6.pt").exists()
+    assert (tmp_path / "best.pt").exists()  # never pruned
 
 
 def test_two_independent_runs_with_same_seed_are_deterministic(tmp_path):

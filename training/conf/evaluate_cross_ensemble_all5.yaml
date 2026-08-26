@@ -12,19 +12,19 @@ defaults:
   - _self_
 
 members:
-  - checkpoint: /userhome/mtech/akashc1005/job_results/1634/checkpoints/best.pt
+  - checkpoint: /userhome/mtech/akashc1005/job_results/2062/checkpoints/best.pt
     architecture: unet
     encoder_name: resnet34
-  - checkpoint: /userhome/mtech/akashc1005/job_results/1654/checkpoints/best.pt
+  - checkpoint: /userhome/mtech/akashc1005/job_results/2063/checkpoints/best.pt
     architecture: unet
     encoder_name: resnet34
-  - checkpoint: /userhome/mtech/akashc1005/job_results/1660/checkpoints/best.pt
+  - checkpoint: /userhome/mtech/akashc1005/job_results/2065/checkpoints/best.pt
     architecture: unet
     encoder_name: resnet34
-  - checkpoint: /userhome/mtech/akashc1005/job_results/1658/checkpoints/best.pt
+  - checkpoint: /userhome/mtech/akashc1005/job_results/2218/checkpoints/best.pt
     architecture: unetplusplus
     encoder_name: resnet34
-  - checkpoint: /userhome/mtech/akashc1005/job_results/1673/checkpoints/best.pt
+  - checkpoint: /userhome/mtech/akashc1005/job_results/2221/checkpoints/best.pt
     architecture: segformer_b2
     encoder_name: b2
 

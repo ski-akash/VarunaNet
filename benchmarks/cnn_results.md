@@ -85,10 +85,16 @@ score 0.5970 and 0.5965; a 0.15 gap is far outside anything seed noise produces 
 should be re-run before the speckle section's conclusions are trusted.
 
 **ChangeAwareUNet seed 3 is missing** because job 2227's checkpoint files were all written
-at 0 bytes -- training completed and logged 30 epochs normally, but the copy-back to
-`~/job_results/` produced empty files. Disk was not the cause (14 TB free, and the sibling
-jobs wrote healthy 335 MB checkpoints), so it looks like an isolated copy failure. The job
-has been requeued.
+at 0 bytes -- training completed and logged 30 epochs normally, but every checkpoint came
+back empty. The cause was the cluster home **quota** being exhausted, so checkpoint writes
+failed silently. An earlier version of this note blamed an isolated copy failure and
+claimed disk was not the cause because `df` reported 14 TB free; `df` reports filesystem
+space, not the per-user quota, and that reasoning was wrong.
+
+Two other jobs from the same window were hit identically -- 2243 (speckle looks=1) and
+2245 (speckle looks=4 seed 1). All three are requeued. Jobs run after the quota was
+cleared write healthy 293 MB checkpoints, so the before/after split is clean: every job
+submitted before the fix is corrupt, every one after it is fine.
 
 ## Primary architecture comparison
 

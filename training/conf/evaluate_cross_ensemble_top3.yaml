@@ -1,23 +1,34 @@
 # Preset for training/evaluate_cross_ensemble.py: the best single
-# checkpoint from each of this project's three strongest architectures
-# so far (cnn_results.md) -- SegFormer-B2 (0.4344), U-Net++ (0.4263),
-# and the primary U-Net seed=1 (0.4198). Diverse architectures (CNN
-# encoder-decoder x2, transformer) making genuinely different kinds of
-# mistakes, rather than 3 seeds of the same model -- the natural next
-# step after same-architecture ensembling (evaluate_ensemble_3seed.sh)
-# already proved to be this project's single best zero-retrain result.
+# checkpoint from each of this project's three strongest architectures,
+# ranked on POOLED IoU from the job-2241 rescore (cnn_results.md) rather
+# than the per-chip means this preset originally used -- U-Net++ 0.6921
+# (job 2218), U-Net seed 3 0.6917 (job 2065), SegFormer-B2 0.6784 (job
+# 2221). All three are ratio-fix retrains.
+#
+# The U-Net member is seed 3, not seed 1: on the fixed checkpoints seed 3
+# is the strongest of the three primary seeds (0.6917 vs 0.6863/0.6863),
+# where seed 1 had been strongest before the fix.
+#
+# "VV+VH only, seed 3" posts a higher pooled IoU (0.6948) than any member
+# here but cannot join: evaluate_cross_ensemble.py requires every member
+# to share the 5-channel input contract, and that model is 3-channel.
+#
+# Diverse architectures (CNN encoder-decoder x2, transformer) making
+# genuinely different kinds of mistakes, rather than 3 seeds of the same
+# model -- the natural next step after same-architecture ensembling
+# (evaluate_ensemble_3seed.sh), this project's best zero-retrain result.
 defaults:
   - dataset: sen1floods11
   - _self_
 
 members:
-  - checkpoint: /userhome/mtech/akashc1005/job_results/1673/checkpoints/best.pt
+  - checkpoint: /userhome/mtech/akashc1005/job_results/2221/checkpoints/best.pt
     architecture: segformer_b2
     encoder_name: b2
-  - checkpoint: /userhome/mtech/akashc1005/job_results/1658/checkpoints/best.pt
+  - checkpoint: /userhome/mtech/akashc1005/job_results/2218/checkpoints/best.pt
     architecture: unetplusplus
     encoder_name: resnet34
-  - checkpoint: /userhome/mtech/akashc1005/job_results/1634/checkpoints/best.pt
+  - checkpoint: /userhome/mtech/akashc1005/job_results/2065/checkpoints/best.pt
     architecture: unet
     encoder_name: resnet34
 

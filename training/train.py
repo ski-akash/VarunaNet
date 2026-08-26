@@ -169,6 +169,40 @@ def build_val_dataloader(cfg) -> DataLoader:
     return build_dataloader(cfg, split_csv_name=cfg.dataset.val_split_csv_name, shuffle=False)
 
 
+
+def _prune_step_checkpoints(checkpoint_dir: Path, keep_last: int) -> None:
+    """
+    Delete all but the `keep_last` most recent step_*.pt snapshots.
+
+    Pruned by step number parsed from the filename rather than by mtime:
+    on a shared filesystem mtime ordering is not reliable enough to decide
+    what to delete, and the step number is the actual ordering we mean.
+    best.pt is not matched by the glob and is never touched.
+
+    Failures are swallowed on purpose. This is disk hygiene running inside
+    the training loop; if a file is already gone or unlinkable, that must
+    not take down a training run that is otherwise fine.
+    """
+    if keep_last is None or keep_last <= 0:
+        return
+
+    def step_of(path: Path) -> int:
+        try:
+            return int(path.stem.split("_")[1])
+        except (IndexError, ValueError):
+            return -1
+
+    snapshots = sorted(
+        (p for p in checkpoint_dir.glob("step_*.pt") if step_of(p) >= 0),
+        key=step_of,
+    )
+    for stale in snapshots[:-keep_last]:
+        try:
+            stale.unlink()
+        except OSError:
+            pass
+
+
 def _loss_kwargs(loss_cfg) -> dict:
     """Only the fields the selected loss actually accepts -- see build_loss."""
     if loss_cfg.name == "dice_bce":
@@ -437,6 +471,7 @@ def run_training(cfg, max_steps: int | None = None) -> dict:
                 cfg,
                 wandb_run_id=wandb_run.id,
             )
+            _prune_step_checkpoints(Path(cfg.checkpoint_dir), cfg.keep_last_checkpoints)
 
         if stopped_early:
             break

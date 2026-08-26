@@ -16,10 +16,11 @@ source "$SLURM_SUBMIT_DIR/.venv/bin/activate"
 cd "$SLURM_SUBMIT_DIR"
 
 # Logit-averaged ensemble of the primary U-Net's 3 real trained seeds
-# (checkpoints from jobs 1634/1654/1660) -- zero retraining, just
+# (checkpoints from jobs 2062/2063/2065, the ratio-fix retrains of
+# 1634/1654/1660) -- zero retraining, just
 # combining what's already on disk.
 python -m training.evaluate_ensemble \
-    checkpoints=[/userhome/mtech/akashc1005/job_results/1634/checkpoints/best.pt,/userhome/mtech/akashc1005/job_results/1654/checkpoints/best.pt,/userhome/mtech/akashc1005/job_results/1660/checkpoints/best.pt] \
+    checkpoints=[/userhome/mtech/akashc1005/job_results/2062/checkpoints/best.pt,/userhome/mtech/akashc1005/job_results/2063/checkpoints/best.pt,/userhome/mtech/akashc1005/job_results/2065/checkpoints/best.pt] \
     dataset=sen1floods11 \
     device=cpu \
     2>&1 | tee "$TMPDIR/results/eval.log"

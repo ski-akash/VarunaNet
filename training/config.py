@@ -140,6 +140,17 @@ class TrainConfig:
     epochs: int = 1
     checkpoint_dir: str = "checkpoints"
     checkpoint_every_steps: int = 50
+    # How many step_*.pt snapshots to keep on disk. These exist only to
+    # resume an interrupted run, so there is no reason to keep the whole
+    # history: at ~300MB each, every 50 steps, a single 12-minute job left
+    # ~6GB behind. Twenty such jobs filled 121GB of the cluster home
+    # quota, and once the quota was exhausted checkpoint writes failed
+    # SILENTLY -- job 2227 reported COMPLETED with a clean 30-epoch log
+    # and every one of its checkpoint files was 0 bytes. Keeping the two
+    # most recent preserves resume (one complete snapshot even if the
+    # newest is torn by a mid-write kill) and bounds a job at ~600MB.
+    # best.pt is written separately and is never pruned.
+    keep_last_checkpoints: int = 2
     resume_from: Optional[str] = None
     # Distinct from resume_from: loads only model weights from a prior
     # checkpoint (e.g. a weak-label pretraining run), leaving optimizer,
