@@ -91,39 +91,49 @@ class CheckpointEntry:
 # genuinely unaffected (they never included that channel) and are left
 # pointing at their original job IDs. Everything else is being retrained
 # under training/train_*_ratio_fix_a100.sh; entries below are updated to the
-# new job ID as each retrain completes -- see ~/sweep_state.tsv on the
-# cluster for live status. Confirmed so far: primary U-Net seeds 1-3
-# (1634/1654/1660 -> 2062/2063/2065), pooled IoU went 0.676/0.660/0.676 ->
-# 0.686/0.686/0.692 -- a small real improvement, not a regression.
+# new job ID as each retrain completes. Confirmed so far: primary U-Net
+# seeds 1-3 (1634/1654/1660 -> 2062/2063/2065), pooled IoU went
+# 0.676/0.660/0.676 -> 0.686/0.686/0.692 -- a small real improvement, not a
+# regression.
+#
+# Sweep round 2 (2026-08-26): jobs 2218-2227 retrained ten more entries --
+# U-Net++, DeepLabV3+, SegFormer-B0/B2, ResNet-50/18, MobileNetV3, and
+# ChangeAwareUNet seeds 1-3 -- and those entries now point at the new IDs.
+# The eight still marked TODO below were not retrained: the sweep was
+# paused with twelve scripts unsubmitted (see
+# benchmarks/ratio_fix_sweep_progress.md and sweep_pending.txt on the
+# cluster). Those eight rows therefore still describe models trained on the
+# broken ratio channel and must not be compared against the retrained rows
+# above them without saying so.
 CHECKPOINTS: list[CheckpointEntry] = [
     CheckpointEntry("U-Net (ResNet-34), seed 1", 2062),
     CheckpointEntry("U-Net (ResNet-34), seed 1 + TTA", 2062, tta=True),
     CheckpointEntry("U-Net (ResNet-34), seed 2", 2063),
     CheckpointEntry("U-Net (ResNet-34), seed 3", 2065),
-    CheckpointEntry("U-Net++ (ResNet-34)", 1658),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("U-Net++ (ResNet-34) + TTA", 1658, tta=True),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("DeepLabV3+ (ResNet-34)", 1667),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("SegFormer-B0", 1670),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("SegFormer-B2", 1673),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("SegFormer-B2 + TTA", 1673, tta=True),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("ChangeAwareUNet, seed 1", 1700),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("ChangeAwareUNet, seed 2", 1714),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("ChangeAwareUNet, seed 3", 1715),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("U-Net++ (ResNet-34)", 2218),  # ratio-fix retrain
+    CheckpointEntry("U-Net++ (ResNet-34) + TTA", 2218, tta=True),  # ratio-fix retrain
+    CheckpointEntry("DeepLabV3+ (ResNet-34)", 2219),  # ratio-fix retrain
+    CheckpointEntry("SegFormer-B0", 2220),  # ratio-fix retrain
+    CheckpointEntry("SegFormer-B2", 2221),  # ratio-fix retrain
+    CheckpointEntry("SegFormer-B2 + TTA", 2221, tta=True),  # ratio-fix retrain
+    CheckpointEntry("ChangeAwareUNet, seed 1", 2225),  # ratio-fix retrain
+    CheckpointEntry("ChangeAwareUNet, seed 2", 2226),  # ratio-fix retrain
+    CheckpointEntry("ChangeAwareUNet, seed 3", 2227),  # ratio-fix retrain
     CheckpointEntry("VV+VH only, seed 1", 1664),  # unaffected, no ratio channel
     CheckpointEntry("VV+VH only, seed 2", 1675),  # unaffected, no ratio channel
     CheckpointEntry("VV+VH only, seed 3", 1686),  # unaffected, no ratio channel
     CheckpointEntry("No ratio (drop VV_VH_ratio)", 1708),  # unaffected, no ratio channel
     CheckpointEntry("No slope", 1710),  # TODO: ratio-fix retrain pending
     CheckpointEntry("No HAND", 1712),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("U-Net (ResNet-50)", 1786),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("U-Net (ResNet-50)", 2222),  # ratio-fix retrain
     CheckpointEntry("U-Net (ResNet-34), Focal loss", 1789),  # TODO: ratio-fix retrain pending
     CheckpointEntry("Speckle, looks=1", 1731),  # TODO: ratio-fix retrain pending
     CheckpointEntry("Speckle, looks=4, seed 1", 1732),  # TODO: ratio-fix retrain pending
     CheckpointEntry("Speckle, looks=4, seed 2", 1753),  # TODO: ratio-fix retrain pending
     CheckpointEntry("Speckle, looks=4, seed 3", 1757),  # TODO: ratio-fix retrain pending
     CheckpointEntry("Speckle, looks=10", 1733),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("U-Net (ResNet-18)", 1941),  # TODO: ratio-fix retrain pending
-    CheckpointEntry("U-Net (MobileNetV3-Large)", 1942),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("U-Net (ResNet-18)", 2223),  # ratio-fix retrain
+    CheckpointEntry("U-Net (MobileNetV3-Large)", 2224),  # ratio-fix retrain
 ]
 
 
