@@ -175,6 +175,10 @@ def _loss_kwargs(loss_cfg) -> dict:
         return {"dice_weight": loss_cfg.dice_weight, "bce_weight": loss_cfg.bce_weight}
     if loss_cfg.name == "focal":
         return {"gamma": loss_cfg.gamma, "alpha": loss_cfg.alpha}
+    if loss_cfg.name == "tversky":
+        return {"alpha": loss_cfg.alpha, "beta": loss_cfg.beta, "gamma": loss_cfg.gamma}
+    if loss_cfg.name == "lovasz":
+        return {"per_image": loss_cfg.per_image}
     return {}
 
 

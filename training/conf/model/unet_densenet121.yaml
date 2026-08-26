@@ -1,0 +1,15 @@
+# Architecture study variant: a second ~15M-parameter encoder alongside
+# unet_resnet18.yaml, but from a genuinely different family -- DenseNet121
+# (~13.6M params) connects every layer within a block to every later
+# layer (feature reuse via concatenation) rather than ResNet's additive
+# skip connections. Picked specifically to separate "does a smaller
+# parameter count help" from "does a smaller ResNet help": ResNet-18 and
+# DenseNet121 land at almost the same total parameter count, so a
+# meaningfully different result between them would point at inductive
+# bias rather than raw size. Same U-Net decoder, same 5-channel data
+# contract as the primary model. See models/unet.py.
+architecture: unet
+encoder_name: densenet121
+encoder_weights: imagenet
+in_channels: 5
+classes: 1

@@ -1,0 +1,8 @@
+# Lovasz hinge loss (spec section 4.2's loss ablation, third variant): a
+# smooth surrogate that directly optimizes IoU, this project's own
+# primary reported metric. `python -m training.train loss=lovasz`. See
+# models/losses.py's build_lovasz_loss. per_image isn't repeated here
+# since TrainConfig's LossConfig already defaults it to the value used
+# here (False -- pooled over the whole batch) -- override on the command
+# line to try per-image averaging instead.
+name: lovasz

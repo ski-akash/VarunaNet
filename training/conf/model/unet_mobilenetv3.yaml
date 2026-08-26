@@ -1,0 +1,16 @@
+# Architecture study variant (spec section 4.1): a much lighter encoder
+# than ResNet-34 -- MobileNetV3-Large (~6.7M params vs ResNet-34's
+# ~24.4M), ImageNet-pretrained via smp's timm-universal wrapper (the
+# "tu-" prefix). Same U-Net decoder, same 5-channel data contract as the
+# primary model. See models/unet.py.
+#
+# Requires the "tu-" prefix rather than a bare name -- MobileNetV3 isn't
+# one of smp's own built-in encoders (only mobilenet_v2 and the
+# mobileone family are), so this goes through smp's generic timm
+# integration instead, which pulls real MobileNetV3-Large ImageNet
+# weights via the timm/HF Hub.
+architecture: unet
+encoder_name: tu-mobilenetv3_large_100
+encoder_weights: imagenet
+in_channels: 5
+classes: 1

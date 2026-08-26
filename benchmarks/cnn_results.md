@@ -180,6 +180,42 @@ under-trained bigger model that would close the gap with more epochs. Not promot
 spending 2 more A100 runs to confirm "bigger encoder doesn't help on this dataset" isn't
 the best use of remaining GPU budget.
 
+## Smaller encoder -- does a lighter backbone beat ResNet-34?
+
+The flip side of the ResNet-50 question above: if a bigger encoder doesn't help on 252
+training chips, does a smaller one help more, or does accuracy start dropping once the
+encoder is too small to represent the problem? Same U-Net decoder, dataset, and training
+recipe (30 epochs, patience=8, seed=1) as the primary baseline; only the encoder changes.
+Two encoders tried, on either side of ResNet-34's ~24.4M parameters:
+`training/conf/model/unet_resnet18.yaml` (ResNet-18, ~14.3M) and
+`training/conf/model/unet_mobilenetv3.yaml` (MobileNetV3-Large, ~6.7M, via smp's
+timm-universal `tu-` encoder prefix -- not one of smp's own built-in encoders).
+
+| Model | Params | Seed | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | Checkpoint job |
+|---|---|---|---|---|---|---|---|---|
+| U-Net (ResNet-34), seed 1 (baseline) | ~24.4M | 1 | 0.4198 | 0.4216 | 0.5760 | -- | -- | 1634 |
+| **U-Net (ResNet-18)** | ~14.3M | 1 | **0.4142** | 0.3883 | 0.5758 | 0.5768 | 0.5901 | 1941 |
+| **U-Net (MobileNetV3-Large)** | ~6.7M | 1 | **0.3783** | 0.3418 | 0.5433 | 0.6052 | 0.5382 | 1942 |
+
+**ResNet-18 essentially matches ResNet-34 (-0.006 mean IoU, well inside the ~±0.009-0.010
+seed-noise band measured above) at 59% of the parameter count.** This is a genuinely
+different result from the ResNet-50 direction: going bigger clearly hurt (-0.023,
+outside the noise band), but going one step smaller costs nothing measurable. That's
+consistent with this project's channel-ablation finding elsewhere in this file (dropping
+3 of 5 input channels also cost next to nothing) -- on this dataset, at this chip count,
+the model has more capacity than the problem needs across more than one axis, not just
+input channels. **MobileNetV3-Large goes a step too far**: -0.042 mean IoU, clearly
+outside the noise band and in the same direction as ResNet-50's overcapacity regression,
+but from the opposite cause -- val IoU during training topped out around 0.39 (epoch 8)
+and plateaued, suggesting the encoder itself is now the bottleneck rather than the
+training data. Recall drops the most (0.5382 vs ResNet-18's 0.5901) while precision holds
+up best of any single-seed result in this file (0.6052) -- the same
+conservative-classifier signature Focal loss produced below, here caused by encoder
+capacity rather than the loss function. Neither was promoted to a 3-seed run: ResNet-18's
+gap is small enough that a 3-seed confirmation would be the more interesting follow-up if
+GPU budget allows (it's the one config in this section that plausibly *is* noise, not a
+real effect either way), while MobileNetV3's gap is large enough not to need it.
+
 ## Loss ablation -- Focal loss vs. the default Dice+BCE
 
 Same U-Net (ResNet-34) architecture, dataset, and training recipe as the primary
@@ -302,3 +338,15 @@ confirming it. Taken together with the channel ablation and speckle results abov
 picture for this dataset/architecture is that most single-knob changes tried so far
 either do nothing or hurt -- the wins that have held up (SegFormer-B2, U-Net++, and
 especially ensembling) all changed something more structural than one hyperparameter.
+
+**The encoder-size study (ResNet-18, MobileNetV3-Large) complicates the "model is too
+big" hypothesis rather than confirming it.** The premise going in was that ResNet-34
+might be overparameterized for 252 training chips, and that a smaller encoder would
+therefore score *higher* -- instead, ResNet-18 essentially tied the baseline (-0.006,
+inside the noise band) and MobileNetV3-Large clearly underperformed it (-0.042, outside
+the noise band, with the same precision-over-recall signature Focal loss produced for a
+different reason). Combined with SegFormer-B2 (a larger, differently-structured model)
+*beating* the baseline, the honest read is that encoder parameter count alone doesn't
+predict accuracy in either direction on this dataset -- architecture family and
+inductive bias matter more than raw size, and "too many parameters" was not, in fact,
+the reason the primary U-Net plateaus around 0.42.

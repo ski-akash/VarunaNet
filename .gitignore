@@ -1,5 +1,9 @@
 VarunaNet_Spec.md
 
+# Internal working notes -- running log of bugs hit and how they were
+# fixed. Local only, same as the spec file above.
+error.md
+
 # Python
 __pycache__/
 *.pyc

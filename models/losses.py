@@ -132,6 +132,74 @@ def build_focal_loss(
     return smp.losses.FocalLoss(mode="binary", gamma=gamma, alpha=alpha, ignore_index=ignore_index)
 
 
+def build_tversky_loss(
+    alpha: float = 0.3,
+    beta: float = 0.7,
+    gamma: float = 1.0,
+    ignore_index: int = LABEL_IGNORE,
+) -> nn.Module:
+    """
+    Build the Tversky loss (Salehi et al. 2017), tried as a second loss
+    ablation alongside Focal loss: Dice generalized with independent
+    weights on false positives (alpha) and false negatives (beta) --
+    alpha == beta == 0.5 reduces exactly to DiceLoss. Used directly from
+    smp (smp.losses.TverskyLoss subclasses smp.losses.DiceLoss and only
+    overrides the score computation and final aggregation), so it inherits
+    DiceLoss's already-verified ignore_index handling: ignored pixels are
+    zeroed out of both prediction and target before the intersection/union
+    ratio, no dilution bug to fix here.
+
+    Default alpha=0.3, beta=0.7 deliberately weights recall over
+    precision -- motivated by a pattern that shows up repeatedly in this
+    project's own benchmark results (benchmarks/cnn_results.md): Focal
+    loss, ResNet-50, and MobileNetV3-Large all independently produced the
+    same "precision holds, recall collapses" failure signature. Tversky
+    with beta > alpha punishes false negatives (missed water pixels) more
+    than false positives, directly targeting that observed weak point
+    rather than a generic imbalance-handling default.
+    """
+    return smp.losses.TverskyLoss(
+        mode="binary",
+        from_logits=True,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        ignore_index=ignore_index,
+    )
+
+
+def build_lovasz_loss(
+    per_image: bool = False,
+    ignore_index: int = LABEL_IGNORE,
+) -> nn.Module:
+    """
+    Build the Lovasz hinge loss (Berman et al. 2018), tried as a third
+    loss ablation: a smooth surrogate that directly optimizes IoU, rather
+    than an imbalance-handling proxy for it the way Dice/BCE/Focal are.
+    Worth trying specifically because IoU is this project's own primary
+    reported metric (spec section 4.3) -- Lovasz is the one loss in this
+    file whose optimization target and the benchmark metric are the same
+    quantity, not just correlated with it.
+
+    Used directly from smp. Read its source before trusting it (same
+    standard this file already holds Dice/BCE/Focal to): binary mode's
+    ignore_index handling (_flatten_binary_scores) drops ignored pixels
+    entirely before the loss is computed at all, the same clean behavior
+    as FocalLoss -- no dilution bug. It also does not require a
+    [B,1,H,W]-vs-[B,H,W] squeeze: both prediction and target are flattened
+    with a plain .view(-1) before use, and squeezing a size-1 channel
+    dimension doesn't change a tensor's flattened element order, so the
+    two align correctly either way -- confirmed with a real forward/
+    backward pass, not just read from source, in tests/test_losses.py.
+
+    per_image=False (the default) computes one Lovasz-hinge score over the
+    whole batch's pooled pixels rather than averaging a per-image score;
+    exposed as a config knob since which is more stable can depend on
+    batch size and wasn't obvious to assume either way.
+    """
+    return smp.losses.LovaszLoss(mode="binary", per_image=per_image, ignore_index=ignore_index)
+
+
 def build_loss(name: str, **kwargs) -> nn.Module:
     """
     Config-driven loss selection, so the training config (Phase 3's
@@ -142,4 +210,10 @@ def build_loss(name: str, **kwargs) -> nn.Module:
         return DiceBCELoss(**kwargs)
     if name == "focal":
         return build_focal_loss(**kwargs)
-    raise ValueError(f"unknown loss name {name!r}, expected 'dice_bce' or 'focal'")
+    if name == "tversky":
+        return build_tversky_loss(**kwargs)
+    if name == "lovasz":
+        return build_lovasz_loss(**kwargs)
+    raise ValueError(
+        f"unknown loss name {name!r}, expected one of 'dice_bce', 'focal', 'tversky', 'lovasz'"
+    )

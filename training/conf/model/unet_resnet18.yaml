@@ -1,0 +1,12 @@
+# Architecture study variant (spec section 4.1), the opposite direction
+# from unet_resnet50.yaml: a shallower ResNet-18 encoder (~14.3M params
+# vs ResNet-34's ~24.4M) -- testing the hypothesis that a smaller,
+# less-capacity encoder generalizes better on only 252 training chips,
+# rather than assuming bigger always helps or always hurts. Same U-Net
+# decoder, same 5-channel data contract as the primary model. See
+# models/unet.py.
+architecture: unet
+encoder_name: resnet18
+encoder_weights: imagenet
+in_channels: 5
+classes: 1

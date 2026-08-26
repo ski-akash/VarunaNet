@@ -1,0 +1,11 @@
+# Tversky loss (spec section 4.2's loss ablation, second variant tried
+# after Focal): `python -m training.train loss=tversky`. See
+# models/losses.py's build_tversky_loss. alpha/beta/gamma aren't repeated
+# here since TrainConfig's LossConfig already defaults them to the values
+# used there (0.3 / 0.7 / 1.0, weighting recall over precision) --
+# override on the command line if a sweep is needed, e.g. loss.beta=0.5
+# for the plain-Dice-equivalent midpoint.
+name: tversky
+alpha: 0.3
+beta: 0.7
+gamma: 1.0

@@ -29,14 +29,19 @@ class ModelConfig:
 
 @dataclass
 class LossConfig:
-    # "dice_bce" or "focal" -- see models/losses.py's build_loss. Not
-    # every field below applies to every name; training/train.py picks
-    # only the ones the selected loss actually accepts.
+    # "dice_bce", "focal", "tversky", or "lovasz" -- see
+    # models/losses.py's build_loss. Not every field below applies to
+    # every name; training/train.py picks only the ones the selected
+    # loss actually accepts. alpha/gamma are shared between focal and
+    # tversky (each config-group yaml sets the value its own loss wants);
+    # beta and per_image are tversky- and lovasz-only respectively.
     name: str = "dice_bce"
     dice_weight: float = 1.0
     bce_weight: float = 1.0
     gamma: float = 2.0
     alpha: Optional[float] = 0.25
+    beta: float = 0.7
+    per_image: bool = False
 
 
 @dataclass

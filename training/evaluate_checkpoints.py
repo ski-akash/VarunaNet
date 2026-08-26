@@ -83,35 +83,47 @@ class CheckpointEntry:
 # (training/evaluate_ensemble.py, training/evaluate_cross_ensemble.py),
 # which combine several of these checkpoints' logits and need their own
 # re-scoring pass on top of this one, not instead of it.
+#
+# VV_VH_ratio retrain (2026-08-24/25): every checkpoint below that includes
+# the ratio channel was trained on the broken VV_VH_ratio (division instead
+# of subtraction) and stale normalization stats -- see
+# training/train_seed1_ratio_fix_a100.sh. "VV+VH only" and "No ratio" are
+# genuinely unaffected (they never included that channel) and are left
+# pointing at their original job IDs. Everything else is being retrained
+# under training/train_*_ratio_fix_a100.sh; entries below are updated to the
+# new job ID as each retrain completes -- see ~/sweep_state.tsv on the
+# cluster for live status. Confirmed so far: primary U-Net seeds 1-3
+# (1634/1654/1660 -> 2062/2063/2065), pooled IoU went 0.676/0.660/0.676 ->
+# 0.686/0.686/0.692 -- a small real improvement, not a regression.
 CHECKPOINTS: list[CheckpointEntry] = [
-    CheckpointEntry("U-Net (ResNet-34), seed 1", 1634),
-    CheckpointEntry("U-Net (ResNet-34), seed 1 + TTA", 1634, tta=True),
-    CheckpointEntry("U-Net (ResNet-34), seed 2", 1654),
-    CheckpointEntry("U-Net (ResNet-34), seed 3", 1660),
-    CheckpointEntry("U-Net++ (ResNet-34)", 1658),
-    CheckpointEntry("U-Net++ (ResNet-34) + TTA", 1658, tta=True),
-    CheckpointEntry("DeepLabV3+ (ResNet-34)", 1667),
-    CheckpointEntry("SegFormer-B0", 1670),
-    CheckpointEntry("SegFormer-B2", 1673),
-    CheckpointEntry("SegFormer-B2 + TTA", 1673, tta=True),
-    CheckpointEntry("ChangeAwareUNet, seed 1", 1700),
-    CheckpointEntry("ChangeAwareUNet, seed 2", 1714),
-    CheckpointEntry("ChangeAwareUNet, seed 3", 1715),
-    CheckpointEntry("VV+VH only, seed 1", 1664),
-    CheckpointEntry("VV+VH only, seed 2", 1675),
-    CheckpointEntry("VV+VH only, seed 3", 1686),
-    CheckpointEntry("No ratio (drop VV_VH_ratio)", 1708),
-    CheckpointEntry("No slope", 1710),
-    CheckpointEntry("No HAND", 1712),
-    CheckpointEntry("U-Net (ResNet-50)", 1786),
-    CheckpointEntry("U-Net (ResNet-34), Focal loss", 1789),
-    CheckpointEntry("Speckle, looks=1", 1731),
-    CheckpointEntry("Speckle, looks=4, seed 1", 1732),
-    CheckpointEntry("Speckle, looks=4, seed 2", 1753),
-    CheckpointEntry("Speckle, looks=4, seed 3", 1757),
-    CheckpointEntry("Speckle, looks=10", 1733),
-    CheckpointEntry("U-Net (ResNet-18)", 1941),
-    CheckpointEntry("U-Net (MobileNetV3-Large)", 1942),
+    CheckpointEntry("U-Net (ResNet-34), seed 1", 2062),
+    CheckpointEntry("U-Net (ResNet-34), seed 1 + TTA", 2062, tta=True),
+    CheckpointEntry("U-Net (ResNet-34), seed 2", 2063),
+    CheckpointEntry("U-Net (ResNet-34), seed 3", 2065),
+    CheckpointEntry("U-Net++ (ResNet-34)", 1658),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("U-Net++ (ResNet-34) + TTA", 1658, tta=True),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("DeepLabV3+ (ResNet-34)", 1667),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("SegFormer-B0", 1670),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("SegFormer-B2", 1673),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("SegFormer-B2 + TTA", 1673, tta=True),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("ChangeAwareUNet, seed 1", 1700),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("ChangeAwareUNet, seed 2", 1714),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("ChangeAwareUNet, seed 3", 1715),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("VV+VH only, seed 1", 1664),  # unaffected, no ratio channel
+    CheckpointEntry("VV+VH only, seed 2", 1675),  # unaffected, no ratio channel
+    CheckpointEntry("VV+VH only, seed 3", 1686),  # unaffected, no ratio channel
+    CheckpointEntry("No ratio (drop VV_VH_ratio)", 1708),  # unaffected, no ratio channel
+    CheckpointEntry("No slope", 1710),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("No HAND", 1712),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("U-Net (ResNet-50)", 1786),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("U-Net (ResNet-34), Focal loss", 1789),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("Speckle, looks=1", 1731),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("Speckle, looks=4, seed 1", 1732),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("Speckle, looks=4, seed 2", 1753),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("Speckle, looks=4, seed 3", 1757),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("Speckle, looks=10", 1733),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("U-Net (ResNet-18)", 1941),  # TODO: ratio-fix retrain pending
+    CheckpointEntry("U-Net (MobileNetV3-Large)", 1942),  # TODO: ratio-fix retrain pending
 ]
 
 
