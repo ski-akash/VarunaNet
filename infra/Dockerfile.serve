@@ -1,0 +1,73 @@
+# Serving image for the inference service (inference/service.py).
+#
+# Deliberately separate from Dockerfile.train, and the split is the point:
+# the training image needs a CUDA base plus torch, torchvision,
+# segmentation-models-pytorch and transformers -- 647MB of installed
+# packages before any CUDA layers. The serving path needs none of them,
+# because the model arrives as ONNX and runs under ONNX Runtime: 211MB of
+# packages, no GPU, no CUDA base.
+#
+# That is a measured difference, and tests/test_serving_deps.py enforces
+# it -- importing inference.service must not pull in the training stack,
+# because a single convenience import would silently triple this image
+# without anything failing.
+#
+# NOTE: not yet built or run. Docker was unavailable in the environment
+# this was written in, so treat it as reviewed-but-unverified until a
+# build has actually succeeded.
+
+FROM python:3.12-slim AS base
+
+# GDAL/PROJ system libraries. rasterio and pyproj ship manylinux wheels
+# with their own copies, but the slim base lacks the runtime loader bits
+# they expect, and the failure is an opaque import error rather than a
+# missing-package message.
+RUN apt-get update && apt-get install --no-install-recommends -y \
+        libexpat1 \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Dependencies are installed from an explicit list rather than from
+# pyproject.toml, because pyproject carries the *training* dependencies
+# too (torch and friends). Installing those here would defeat the entire
+# reason this image exists.
+COPY infra/requirements-serve.txt ./
+RUN pip install --no-cache-dir -r requirements-serve.txt
+
+# Only the modules the service actually imports. Copying the whole repo
+# would drag training/, benchmarks/ and their imports into the image and
+# make it far easier for a training import to creep into the serving path
+# unnoticed.
+COPY inference/ ./inference/
+COPY data/contract.py data/normalization.py ./data/
+COPY frontend/public/geo/assam_districts.geojson ./frontend/public/geo/
+
+# The exported model and staged scenes are mounted, not baked in: the
+# model changes on its own cadence (a retrain should not require an image
+# rebuild) and scenes are far too large to ship.
+ENV VARUNANET_MODEL_PATH=/models/model.int8.onnx \
+    VARUNANET_SCENE_ROOT=/scenes
+
+EXPOSE 8000
+
+# Runs as a non-root user. The service reads mounted scenes and never
+# writes to them, so it needs no write access anywhere in the image.
+RUN useradd --create-home --uid 10001 varuna
+USER varuna
+
+# /health reports "no_model" rather than failing when the model is absent,
+# so the healthcheck asserts on the payload, not just on a 200. A
+# container that answers 200 with no model loaded would otherwise stay in
+# the load balancer serving 503s.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request, json, sys; \
+b = json.load(urllib.request.urlopen('http://127.0.0.1:8000/health')); \
+sys.exit(0 if b.get('status') == 'ok' else 1)"
+
+CMD ["uvicorn", "inference.service:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,28 @@
+# Serving dependencies only -- deliberately NOT installed from
+# pyproject.toml, which also carries the training stack (torch,
+# torchvision, segmentation-models-pytorch, transformers: 647MB of
+# packages, against 211MB for this list). Installing those into
+# Dockerfile.serve would defeat the reason that image exists.
+#
+# Kept in sync by tests/test_serving_deps.py, which fails if anything the
+# service imports starts pulling the training stack back in.
+#
+# Direct dependencies only. pydantic, starlette, anyio and
+# typing-extensions arrive with fastapi; attrs arrives with rasterio.
+# They were checked against the service's actual imported module set
+# rather than assumed, so nothing here is missing -- pinning transitive
+# deps by hand would just go stale.
+
+# Model runtime. No torch: the model arrives as ONNX (inference/export_onnx.py).
+onnxruntime
+
+# HTTP surface
+fastapi
+uvicorn[standard]
+
+# Raster IO and geometry for the pipeline
+numpy
+rasterio
+shapely
+pyproj
+affine
