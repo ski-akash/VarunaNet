@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractNumericClaims, checkGroundedness } from "./groundedness.js";
+import { extractNumericClaims, extractIdentifierClaims, checkGroundedness } from "./groundedness.js";
 
 const REAL_TOOL_RESULT = {
   tool: "get_worst_affected",
@@ -98,4 +98,35 @@ test("checkGroundedness: an out-of-scope refusal with no tool results and no num
   );
 
   assert.equal(result.groundednessRate, 1);
+});
+
+test("extractIdentifierClaims finds a chip/scene id", () => {
+  const claims = extractIdentifierClaims("The scene India_900498 was processed.");
+  assert.deepEqual(
+    claims.map((c) => c.text),
+    ["India_900498"],
+  );
+});
+
+test("checkGroundedness: a real scene id from the tool result is grounded", () => {
+  const toolResult = { scene_id: "India_900498", water_pixel_fraction: 0.54 };
+  const result = checkGroundedness("The scene India_900498 was just processed.", [toolResult]);
+
+  assert.equal(result.groundednessRate, 1);
+});
+
+test("checkGroundedness: a FABRICATED scene id is caught -- the real failure this was built for", () => {
+  // Reproduces a real live failure: with a null tool result (no scene
+  // processed yet), the model still answered with a specific, plausible-
+  // looking but entirely made-up scene id. The numeric checker alone
+  // cannot catch this (extractNumericClaims deliberately excludes
+  // chip-id-shaped tokens from numeric extraction), which is exactly why
+  // identifier claims are checked separately.
+  const toolResult = { tool: "get_scene_metadata", data: null };
+  const result = checkGroundedness(
+    "The scene India_900498 shows 15.4% flooded across 1,308 polygons.",
+    [toolResult],
+  );
+
+  assert.ok(result.groundednessRate < 1);
 });

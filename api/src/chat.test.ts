@@ -50,6 +50,72 @@ test("POST /chat answers a question via the agent loop", async () => {
   await pool.end();
 });
 
+test("POST /chat replaces a fabricated answer instead of showing it, even flagged", async () => {
+  // Reproduces a real failure caught live against a real (empty) database:
+  // the model answered with a specific fabricated scene id, model name,
+  // and percentages when the actual tool result was null. A caller that
+  // only reads `response` (most callers, including the frontend's main
+  // message bubble) must never see those numbers -- flagging the problem
+  // in a side channel isn't enough, spec section 6.1 requires the
+  // fabricated text itself to not reach the user.
+  class FabricatingLLMClient implements LLMClient {
+    private calls = 0;
+    async generateTurn(): Promise<Message> {
+      this.calls += 1;
+      if (this.calls === 1) {
+        return {
+          role: "model",
+          parts: [
+            {
+              functionCall: { name: "get_scene_metadata", args: {}, id: "c1" },
+              thoughtSignature: "sig1",
+            },
+          ],
+        };
+      }
+      return {
+        role: "model",
+        parts: [
+          {
+            text: "The scene India_900498 shows 15.4% flooded across 1,308 polygons.",
+          },
+        ],
+      };
+    }
+  }
+
+  const pool = createPgPool(TEST_DATABASE_URL);
+  await pool.query("TRUNCATE scenes, district_impacts");
+  const app = buildServer(
+    { inferenceServiceUrl: "http://unused", resultCacheTtlSeconds: 3600 },
+    new FakeInferenceClient(),
+    undefined,
+    pool,
+    new FabricatingLLMClient(),
+  );
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/chat",
+    payload: { message: "Which scene was just processed?" },
+  });
+
+  const body = res.json();
+  assert.equal(res.statusCode, 200);
+  assert.equal(body.grounded, false);
+  assert.ok(!body.response.includes("India_900498"));
+  assert.ok(!body.response.includes("15.4"));
+  assert.ok(!body.response.includes("1,308"));
+  // The real tool call/result still goes out untouched -- that's the
+  // actual, honest record of what happened this turn, unlike the model's
+  // prose.
+  assert.equal(body.tool_calls[0].name, "get_scene_metadata");
+  assert.equal(body.tool_calls[0].result.data, null);
+
+  await app.close();
+  await pool.end();
+});
+
 test("POST /chat rejects a request with no message", async () => {
   const pool = createPgPool(TEST_DATABASE_URL);
   const app = buildServer(

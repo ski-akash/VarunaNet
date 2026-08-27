@@ -27,6 +27,27 @@ export interface GroundednessCheck {
   groundednessRate: number;
 }
 
+// Chip/scene-id-shaped tokens (e.g. "India_900498") are masked OUT of
+// numeric-claim extraction below, deliberately -- a real chip id appearing
+// in real tool output is not a "numeric claim" to fuzzy-match, it's an
+// identifier. That exemption has a real cost, caught live: a model can
+// state a completely FABRICATED scene id and the numeric checker alone
+// never flags it, since the id was never extracted as a claim at all.
+// Checked separately here, literally (the id string itself must appear
+// verbatim in the tool results), which is exactly why the exemption above
+// doesn't reopen a hole -- a fabricated id fails this check even though it
+// skips the numeric one.
+const IDENTIFIER_PATTERN = /\b[A-Za-z]+_\d+\b/g;
+
+export interface IdentifierClaim {
+  text: string;
+  index: number;
+}
+
+export function extractIdentifierClaims(text: string): IdentifierClaim[] {
+  return Array.from(text.matchAll(IDENTIFIER_PATTERN), (m) => ({ text: m[0], index: m.index }));
+}
+
 // ISO-8601 timestamps ("2026-08-27T08:49:38.000Z") and this project's chip
 // ids ("India_900498") both contain digit runs that are not numeric claims
 // about a quantity. Masking them out before number extraction is more
@@ -91,6 +112,17 @@ export function checkGroundedness(responseText: string, toolResults: unknown[]):
   const toolResultsText = JSON.stringify(toolResults);
   const claims = extractNumericClaims(responseText);
   const grounded = claims.map((c) => isGrounded(c, toolResultsText));
-  const groundednessRate = claims.length === 0 ? 1 : grounded.filter(Boolean).length / claims.length;
+
+  // Identifier claims (scene/chip ids) fold into the same overall rate --
+  // a fabricated id is exactly as disqualifying as a fabricated number,
+  // even though it's checked by literal substring match rather than the
+  // numeric-value comparison isGrounded uses.
+  const identifierClaims = extractIdentifierClaims(responseText);
+  const identifierGrounded = identifierClaims.map((c) => toolResultsText.includes(c.text));
+
+  const totalClaims = claims.length + identifierClaims.length;
+  const totalGrounded = grounded.filter(Boolean).length + identifierGrounded.filter(Boolean).length;
+  const groundednessRate = totalClaims === 0 ? 1 : totalGrounded / totalClaims;
+
   return { claims, grounded, groundednessRate };
 }

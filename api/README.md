@@ -69,6 +69,34 @@ Needs a local Redis for both running the gateway and running its Redis-backed te
 `redis://localhost:6379/15` by default (a separate DB index, not the default one) so
 running the tests doesn't collide with a real dev instance's data.
 
+## A real hallucination caught live, and how it's actually prevented now
+
+Testing against a real (freshly-provisioned, empty) hosted database surfaced a genuine
+failure: with `get_scene_metadata` returning `data: null`, the model answered with a
+specific, fabricated scene id, model name, processing date, and district count anyway.
+The numeric groundedness checker below didn't catch the scene id itself — it
+deliberately excludes chip-id-shaped tokens from numeric extraction, since a *real* id
+appearing in real output isn't a number to fuzzy-match — so a fabricated one slipped
+through with `grounded: true`. Two real fixes, not one:
+
+1. **`src/llm/geminiClient.ts` now sends an explicit `systemInstruction`**: never state
+   a scene id, date, district, or number that doesn't appear verbatim in a tool result
+   this turn; say plainly when a tool result is null/empty rather than inventing
+   something plausible. Confirmed live: the same question that previously produced a
+   fabricated scene now gets "No scene has been processed yet," and asking it directly
+   to guess still gets a refusal.
+2. **`src/routes/chat.ts` no longer just flags a non-grounded response — it replaces
+   the text entirely** before it reaches the caller, keeping only the real tool
+   call/result (which is honest regardless of what the model said about it). A
+   groundedness flag a caller has to notice in a side channel isn't a real guarantee;
+   spec section 6.1 calls hallucinated flood statistics "actively dangerous," which
+   means the fabricated text must not reach the user at all, not just arrive labeled.
+3. **`src/grounding/groundedness.ts` (and its `ai-eval/` source) gained
+   `extractIdentifierClaims`**: chip/scene-id-shaped tokens are now checked for literal
+   presence in the tool results too, folded into the same overall `groundednessRate` —
+   closing the exact gap that let the live failure through undetected in the first
+   place. A dedicated regression test reproduces the original failure verbatim.
+
 ## The agent loop and chat (Phase 6, live)
 
 `POST /chat {message}` — spec section 6's "one tool-calling agent over a common tool
