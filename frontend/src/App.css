@@ -26,6 +26,37 @@
   flex: 1;
 }
 
+.backend-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.backend-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.backend-status-dot--ok {
+  background: #2f9e44;
+}
+
+.backend-status-dot--degraded {
+  background: #f0a202;
+}
+
+.backend-status-dot--unreachable {
+  background: #d9363e;
+}
+
+.backend-status-dot--checking {
+  background: var(--border);
+}
+
 .generate-report-button {
   padding: 6px 12px;
   border-radius: 6px;

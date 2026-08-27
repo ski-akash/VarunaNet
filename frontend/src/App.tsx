@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import BackendStatus from './components/BackendStatus'
 import ChatPanel from './components/ChatPanel'
 import MapView from './components/MapView'
 import ReportViewer from './components/ReportViewer'
@@ -19,6 +20,7 @@ function App() {
       <header className="app-header">
         <h1>VarunaNet</h1>
         <span className="app-subtitle">SAR flood detection &amp; situational awareness</span>
+        <BackendStatus />
         <button
           type="button"
           className="generate-report-button"
