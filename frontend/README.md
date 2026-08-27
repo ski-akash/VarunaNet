@@ -52,6 +52,15 @@ language query (feature 1) and conversational map control (feature 3, via the
   trace shows the model proposed a real view change, but the map itself doesn't move.
   That plumbing is the natural next step once this piece is reviewed.
 
+## Rivers
+
+`MapView.tsx` renders real Assam river centerlines (`/geo/assam_rivers.geojson`,
+built by `data/fetch_assam_rivers.py` from OpenStreetMap via the Overpass API) — the
+Brahmaputra and its 15 longest named tributaries by real total length, not hand-picked.
+The Brahmaputra renders brighter/thicker (`major: true` in the source data) than its
+tributaries — two distinct colors, not one flat blue for every river, so the state's
+defining feature doesn't get visually lost among its own tributaries.
+
 ## Real district coloring (Track B Step 3, live)
 
 The choropleth is real now, for the districts a real result actually covers.
@@ -61,8 +70,14 @@ Google Earth Engine, scored with this project's own classical baseline); `MapVie
 turns each district's `flooded_percent` (normalized against the worst-affected district
 in that result, not an absolute 0–100% scale) into a color via `severityColor()` and
 applies it as a `match` expression on the existing `district-fill` layer, layered under
-the existing selected/hover states. `AssamFloodDemoBadge.tsx` (a second, blue-accented
-badge next to the existing red news-report one — deliberately distinct, since a real SAR
-measurement and a news report are different kinds of claim) discloses the real scene id,
-processing time, and — explicitly — that every other district has no data yet, not zero
-flooding, since this is one small AOI (~16km), not full-state coverage.
+the existing selected/hover states. `AssamFloodDemoBadge.tsx` (top-left, clear of
+MapLibre's own top-right zoom/compass control stack — placing it there originally was a
+real bug: MapLibre's control stack height isn't a value this stylesheet controls, so a
+guessed pixel offset drifted out of sync with it) discloses the real scene id, processing
+time, and — explicitly — that every other district has no data yet, not zero flooding,
+since this is one small AOI (~16km), not full-state coverage.
+
+`FloodReportBadge.tsx`/`lib/currentFloodReports.ts` (the earlier news-reported-districts
+badge) are no longer rendered on the map, at the user's request — the files are still
+in the tree, unused, in case that feature comes back rather than needing to be rebuilt
+from scratch.

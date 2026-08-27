@@ -6,7 +6,6 @@ import {
   type StyleSpecification,
 } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import FloodReportBadge from './FloodReportBadge'
 import AssamFloodDemoBadge from './AssamFloodDemoBadge'
 import LayerToggles from './LayerToggles'
 import SeverityLegend from './SeverityLegend'
@@ -38,6 +37,14 @@ const ASSAM_FIT_OPTIONS = { padding: 32, maxZoom: 9 }
 // derived from exactly the same geometry and cannot disagree.
 const ASSAM_STATE_GEOJSON_URL = '/geo/assam_state.geojson'
 const ASSAM_DISTRICTS_GEOJSON_URL = '/geo/assam_districts.geojson'
+// Real river centerlines from OpenStreetMap (waterway=river ways within
+// Assam, fetched via the Overpass API -- © OpenStreetMap contributors,
+// ODbL, same licence-requires-attribution category as DataMeet's
+// boundaries below), filtered to the Brahmaputra and its 14 longest named
+// tributaries by real total length (not hand-picked) and simplified for
+// state-zoom display, the same way the district/state boundary files are
+// pre-built rather than fetched live in the browser.
+const ASSAM_RIVERS_GEOJSON_URL = '/geo/assam_rivers.geojson'
 
 // Everything outside Assam is empty black space, by intent -- this is a
 // single-subject map, not an atlas, so there is no land/water styling and
@@ -49,6 +56,12 @@ const DISTRICT_HOVER_COLOR = '#33394a'
 const DISTRICT_SELECTED_COLOR = '#4a5570'
 const DISTRICT_BORDER_COLOR = '#5a6275'
 const STATE_OUTLINE_COLOR = '#e6e8ee'
+// Two distinct colors, not one flat blue for every river: the Brahmaputra
+// (flagged `major` in the source data) is the subject of the whole
+// project and reads brighter/thicker; its tributaries are a dimmer,
+// thinner blue so they're visible without competing with it.
+const RIVER_COLOR_MAJOR = '#4fc3f7'
+const RIVER_COLOR_TRIBUTARY = '#2c6e8c'
 
 const BASE_STYLE: StyleSpecification = {
   version: 8,
@@ -103,7 +116,7 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
       attributionControl: {
         compact: true,
         customAttribution:
-          'Boundaries: <a href="https://github.com/datameet/maps" target="_blank" rel="noreferrer">DataMeet</a>, Census 2011 (CC BY 4.0)',
+          'Boundaries: <a href="https://github.com/datameet/maps" target="_blank" rel="noreferrer">DataMeet</a>, Census 2011 (CC BY 4.0) · Rivers: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors (ODbL)',
       },
     })
     map.addControl(new NavigationControl(), 'top-right')
@@ -124,6 +137,7 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
         promoteId: 'id',
       })
       map.addSource('assam-state', { type: 'geojson', data: ASSAM_STATE_GEOJSON_URL })
+      map.addSource('assam-rivers', { type: 'geojson', data: ASSAM_RIVERS_GEOJSON_URL })
 
       map.addLayer({
         id: 'district-fill',
@@ -158,6 +172,23 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
         type: 'line',
         source: 'assam-state',
         paint: { 'line-color': STATE_OUTLINE_COLOR, 'line-width': 1.6 },
+      })
+
+      map.addLayer({
+        id: 'rivers',
+        type: 'line',
+        source: 'assam-rivers',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': [
+            'case',
+            ['boolean', ['get', 'major'], false],
+            RIVER_COLOR_MAJOR,
+            RIVER_COLOR_TRIBUTARY,
+          ],
+          'line-width': ['case', ['boolean', ['get', 'major'], false], 2.4, 1.1],
+          'line-opacity': 0.85,
+        },
       })
 
       let hoveredDistrict: string | number | null = null
@@ -280,7 +311,6 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
       )}
       <LayerToggles />
       <SeverityLegend />
-      <FloodReportBadge />
       {floodDemo && <AssamFloodDemoBadge demo={floodDemo} />}
     </div>
   )

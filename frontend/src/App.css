@@ -577,13 +577,22 @@
   font-size: 10.5px;
 }
 
-/* SAR-measured coloring badge -- distinct blue accent, not the news
-   badge's red, since these are two different kinds of claim (a real
-   Sentinel-1 measurement vs. a news report) and shouldn't visually read
-   as the same thing. Stacked directly below the news badge (49px lower:
-   its button + popover-open height), not on top of it. */
+/* SAR-measured coloring badge -- distinct blue accent, since a real
+   Sentinel-1 measurement and a news report are different kinds of claim
+   and shouldn't visually read as the same thing.
+
+   Deliberately NOT in the top-right corner: that's MapLibre's own control
+   stack (zoom +/-, compass), whose real rendered height isn't a value
+   this stylesheet controls, so a guessed pixel offset there drifts out of
+   sync with it -- confirmed live via getBoundingClientRect, not assumed
+   -- and is exactly what caused this badge to visually overlap the nav
+   controls. Top-left instead, clear of .map-nav (the back-button/
+   district-name pair, ~30px tall when a district is selected) with a
+   comfortable margin, and nothing else ever renders there. */
 .assam-flood-demo-badge {
-  top: 164px;
+  top: 56px;
+  left: 12px;
+  right: auto;
 }
 
 .assam-flood-demo-badge .flood-source-info-button {
@@ -601,5 +610,11 @@
 }
 
 .assam-flood-demo-badge .flood-source-popover {
+  /* The base .flood-source-popover anchors right:0 (correct for the news
+     badge, which sits at the map's right edge) -- from the left edge
+     instead, or its ~300px width would overflow past the map panel's own
+     left boundary into whatever is behind it. */
+  left: 0;
+  right: auto;
   border-color: #2c7fb8;
 }
