@@ -21,6 +21,15 @@ export interface GatewayConfig {
   // real-time system), so an hour-scale TTL is about caching repeat map
   // views of the same pass, not about freshness.
   resultCacheTtlSeconds: number;
+  // Comma-separated list of accepted API keys, checked against the
+  // x-api-key header on every route except /health (infra/uptime checks
+  // and the frontend's own status dot need to work without a key). Empty
+  // means auth is off -- the default, so a bare `npm run dev` still works
+  // for local development without first minting a key; set API_KEYS to
+  // turn it on for anything reachable outside a dev machine.
+  apiKeys: string[];
+  rateLimitMax: number;
+  rateLimitWindowMs: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -32,5 +41,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     databaseUrl: env.DATABASE_URL ?? "postgres://localhost:5432/varunanet",
     corsOrigins: (env.CORS_ORIGINS ?? "http://localhost:5173").split(",").map((s) => s.trim()),
     resultCacheTtlSeconds: Number(env.RESULT_CACHE_TTL_SECONDS ?? 3600),
+    apiKeys: (env.API_KEYS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+    rateLimitMax: Number(env.RATE_LIMIT_MAX ?? 120),
+    rateLimitWindowMs: Number(env.RATE_LIMIT_WINDOW_MS ?? 60_000),
   };
 }

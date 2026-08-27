@@ -109,6 +109,33 @@ Needs a local Postgres+PostGIS for both running the gateway and its DB-backed te
 varunanet_test -f src/db/schema.sql` (tests default to
 `postgres://localhost:5432/varunanet_test`, override with `TEST_DATABASE_URL`).
 
+## Auth and rate limiting
+
+- **`src/auth.ts`** (`registerAuth`) — a single shared API key, checked against the
+  `x-api-key` header on every route except `GET /health` (infra checks and the frontend's
+  own status dot need to work without one, and it reveals nothing sensitive). Configured
+  via `API_KEYS` (comma-separated, for rotation — old and new key both valid during a
+  rotation window). **Empty by default**, a deliberate, explicit, logged-at-startup state
+  for local dev (`npm run dev` shouldn't require minting a key first) — set `API_KEYS`
+  for anything reachable outside a dev machine. This is a single-role dashboard, not
+  multi-tenant (spec section 2), so one shared secret per deployment is the right amount
+  of auth, not per-user accounts.
+- **`@fastify/rate-limit`**, registered globally — `RATE_LIMIT_MAX` requests per
+  `RATE_LIMIT_WINDOW_MS` (defaults 120/60s), applied before auth so a key-guessing script
+  gets throttled the same as anything else.
+- **Real bug hit and fixed while adding these**: routes registered directly after
+  `app.register(cors, ...)` / `app.register(rateLimit, ...)` (no `await`, matching
+  Fastify's normal non-blocking registration style) silently never got rate-limited —
+  `app.ready()` reported success and there was no error anywhere, but two rapid requests
+  both returned `200` instead of the second one being `429`. Both plugins wire their
+  per-route behavior via an `onRoute` listener added during their own registration, and a
+  route declared in the same synchronous tick can land before that listener attaches.
+  Fixed by wrapping every route registration in `app.after(() => { ... })`, which defers
+  it until every plugin registered above it has fully finished — without requiring
+  `buildServer` itself to become `async` (it's called synchronously throughout the test
+  suite and `index.ts`). Caught by a test that actually sent two requests and checked the
+  second was `429`, not by reasoning about the code.
+
 ## CORS
 
 `server.ts` registers `@fastify/cors`, allowing the origins in `CORS_ORIGINS`
