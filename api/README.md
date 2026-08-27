@@ -69,9 +69,63 @@ Needs a local Redis for both running the gateway and running its Redis-backed te
 `redis://localhost:6379/15` by default (a separate DB index, not the default one) so
 running the tests doesn't collide with a real dev instance's data.
 
-**Not built yet:** the tile cache and the LLM semantic cache (Redis jobs 3 and 4 — the
-latter needs Phase 6's agent loop to exist first), the LLM agent loop itself, SSE
-streaming.
+## The agent loop and chat (Phase 6, live)
+
+`POST /chat {message}` — spec section 6's "one tool-calling agent over a common tool
+registry," now real, not groundwork. Registered only when both a database and an LLM
+provider key are configured (`GEMINI_API_KEY`); otherwise the route doesn't exist (404,
+not a 500) and the rest of the API works exactly as before.
+
+- **`src/llm/types.ts`** / **`src/llm/geminiClient.ts`** (`GeminiClient`) — the
+  provider adapter. Shaped closely to Gemini's own turn structure (`role`/`parts`,
+  `functionCall`/`functionResponse`) rather than an invented abstraction — a second
+  provider adapter, if one is ever added, is what would prove the `LLMClient` interface
+  boundary is the right one; a premature multi-provider abstraction over a single
+  working implementation isn't. **Model catalog verified live, not from training
+  knowledge, which turned out to be stale**: `gemini-2.5-flash`/`-flash-lite` both 404
+  ("no longer available to new users") on a real key tested during this build.
+  `gemini-3.5-flash-lite` is the model actually confirmed working end to end, including
+  function calling. Also confirmed live: Gemini 3.x requires a function call's
+  `thoughtSignature` to be echoed back verbatim on any later turn that replays it, or
+  the API rejects the request outright — not documented anywhere obvious, found by a
+  real `400 INVALID_ARGUMENT` during manual testing before writing any code.
+- **`src/agent/toolDeclarations.ts`** — bridges `src/tools/registry.ts`'s
+  provider-agnostic `ToolRegistry` to Gemini's function-declaration format, and
+  dispatches a model-requested call back to the real registry method. Only the 3 tools
+  `registry.ts` actually implements are declared — the model is never given a tool that
+  doesn't exist.
+- **`src/agent/agentLoop.ts`** (`runAgentTurn`) — the loop itself: call the model, run
+  any requested tool calls against the real registry, feed results back, repeat (capped
+  at 4 rounds) until a text-only response. **Every numeric claim in that final response
+  is checked against the turn's own tool results before it leaves the loop** —
+  `src/grounding/groundedness.ts`, a production copy of `ai-eval/src/groundedness.ts`'s
+  checker (see that file's own comment for why duplicated rather than imported across
+  packages). A response with any ungrounded number is still returned (refusing outright
+  was judged too heavy-handed for a first cut) but flagged — `grounded: false` in the
+  response body, logged as a warning server-side, and shown to the user in the frontend
+  rather than silently passed through.
+- Feature 3 (conversational map control) is already reachable through this same
+  endpoint: `set_map_view` is one of the three real tools, so asking to zoom somewhere
+  makes the model call it and the proposed view comes back in `tool_calls` for the
+  frontend to apply — no separate integration needed, exactly the point of one shared
+  registry (spec section 6).
+- **Verified live end to end**, not just against the scripted-fake tests: real requests
+  through the real gateway, real Postgres data (the `India_900498` demo scene from
+  earlier pieces), and the real Gemini API — both "which district is worst affected"
+  (correctly, honestly reports 0 flooded hectares for the untrained demo model rather
+  than inventing a flood) and "zoom to Golaghat and show the flood extent layer"
+  (correctly calls `set_map_view`) confirmed working, screenshotted in the actual
+  frontend.
+- 8 new tests (34 total in `api/`): 5 for the agent loop (tool execution, grounding
+  catching a fabricated number, no-tool-needed path, `set_map_view`, a failed tool call
+  surfacing as a `functionResponse` instead of throwing) via a scripted fake `LLMClient`
+  — no real network calls in the test suite — plus 3 for the `/chat` route itself.
+
+**Not built yet:** the tile cache and the LLM semantic cache (Redis jobs 3 and 4), SSE
+streaming (responses are currently synchronous JSON, not token-by-token), the golden-set
+eval harness (`ai-eval/`), and features 2/4 (sitreps, severity explanation/alerting) —
+those need real Assam data and the report/uncertainty pipelines this endpoint doesn't
+touch.
 
 ## PostGIS: the system of record
 

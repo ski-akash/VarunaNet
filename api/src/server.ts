@@ -9,23 +9,33 @@ import { SceneQueue } from "./sceneQueue.js";
 import { ResultCache } from "./resultCache.js";
 import { SceneRepository } from "./db/sceneRepository.js";
 import { registerAuth } from "./auth.js";
+import { registerChatRoute } from "./routes/chat.js";
+import { ToolRegistry } from "./tools/registry.js";
+import { GeminiClient } from "./llm/geminiClient.js";
+import type { LLMClient } from "./llm/types.js";
 import type { GatewayConfig } from "./config.js";
 import type { Redis } from "ioredis";
 import type pg from "pg";
 
 type BuildServerConfig = Pick<GatewayConfig, "inferenceServiceUrl" | "resultCacheTtlSeconds"> &
-  Partial<Pick<GatewayConfig, "corsOrigins" | "apiKeys" | "rateLimitMax" | "rateLimitWindowMs">>;
+  Partial<
+    Pick<
+      GatewayConfig,
+      "corsOrigins" | "apiKeys" | "rateLimitMax" | "rateLimitWindowMs" | "geminiApiKey"
+    >
+  >;
 
-// buildServer takes the inference client, Redis connection, and Postgres
-// pool as parameters (rather than constructing them internally) so tests
-// can swap in fakes and exercise the routes with zero real HTTP calls, no
-// running Python service, and -- for the routes that don't touch the
-// queue/cache/DB -- no Redis or Postgres either.
+// buildServer takes the inference client, Redis connection, Postgres pool,
+// and LLM client as parameters (rather than constructing them internally)
+// so tests can swap in fakes and exercise the routes with zero real HTTP
+// calls, no running Python service, and -- for the routes that don't touch
+// the queue/cache/DB/LLM -- no Redis, Postgres, or Gemini API key either.
 export function buildServer(
   config: BuildServerConfig,
   inference: InferenceClient = new HttpInferenceClient(config.inferenceServiceUrl),
   redis?: Redis,
   pgPool?: pg.Pool,
+  llm: LLMClient | undefined = config.geminiApiKey ? new GeminiClient(config.geminiApiKey) : undefined,
 ): FastifyInstance {
   const app = Fastify({ logger: true });
 
@@ -65,6 +75,13 @@ export function buildServer(
       const cache = new ResultCache(redis, config.resultCacheTtlSeconds);
       const repository = new SceneRepository(pgPool);
       registerScenesRoutes(app, queue, cache, repository);
+    }
+
+    // Needs both a real tool registry (Postgres) and an LLM client (a
+    // Gemini key) -- neither alone is enough to answer a question safely.
+    if (pgPool && llm) {
+      const registry = new ToolRegistry(new SceneRepository(pgPool));
+      registerChatRoute(app, llm, registry);
     }
   });
 

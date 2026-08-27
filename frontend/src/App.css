@@ -260,11 +260,64 @@
   padding: 8px 14px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: var(--border);
-  color: var(--text);
+  background: var(--bg);
+  color: var(--text-h);
   font-family: var(--sans);
   font-size: 13px;
+  cursor: pointer;
+}
+
+.chat-panel-input-row button:disabled {
+  background: var(--border);
+  color: var(--text);
   cursor: not-allowed;
+}
+
+.chat-panel-input-row button:not(:disabled):hover {
+  background: var(--border);
+}
+
+.chat-message {
+  margin-bottom: 14px;
+}
+
+.chat-message-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-h);
+}
+
+.chat-message--user .chat-message-text {
+  color: var(--text);
+}
+
+.chat-message--error .chat-message-text {
+  color: #d9363e;
+}
+
+.chat-tool-trace {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.chat-tool-trace summary {
+  cursor: pointer;
+}
+
+.chat-grounding-warning {
+  color: #f0a202;
+}
+
+.chat-tool-call {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--border);
+  font-family: monospace;
+  font-size: 11px;
+  overflow-x: auto;
 }
 
 .time-slider {

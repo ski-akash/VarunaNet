@@ -30,6 +30,11 @@ export interface GatewayConfig {
   apiKeys: string[];
   rateLimitMax: number;
   rateLimitWindowMs: number;
+  // Empty means the chat feature is unavailable (POST /chat returns 503)
+  // rather than the gateway refusing to start -- the rest of the API
+  // (scenes, health, auth) has nothing to do with the LLM layer and
+  // shouldn't be held hostage by a missing key.
+  geminiApiKey: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -47,5 +52,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
       .filter((s) => s.length > 0),
     rateLimitMax: Number(env.RATE_LIMIT_MAX ?? 120),
     rateLimitWindowMs: Number(env.RATE_LIMIT_WINDOW_MS ?? 60_000),
+    geminiApiKey: env.GEMINI_API_KEY ?? "",
   };
 }
