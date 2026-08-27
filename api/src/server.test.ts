@@ -25,7 +25,7 @@ test("GET /health returns ok when the inference service is reachable", async () 
       throw new Error("not used");
     },
   );
-  const app = buildServer({ inferenceServiceUrl: "http://unused" }, client);
+  const app = buildServer({ inferenceServiceUrl: "http://unused", resultCacheTtlSeconds: 3600 }, client);
 
   const res = await app.inject({ method: "GET", url: "/health" });
 
@@ -42,7 +42,7 @@ test("GET /health reports degraded, not ok, when the inference service is down",
       throw new Error("not used");
     },
   );
-  const app = buildServer({ inferenceServiceUrl: "http://unused" }, client);
+  const app = buildServer({ inferenceServiceUrl: "http://unused", resultCacheTtlSeconds: 3600 }, client);
 
   const res = await app.inject({ method: "GET", url: "/health" });
 
@@ -59,7 +59,7 @@ test("POST /predict forwards scene_id and relays the inference service's answer"
       return { scene_id: sceneId, total_flooded_hectares: 1251.4 };
     },
   );
-  const app = buildServer({ inferenceServiceUrl: "http://unused" }, client);
+  const app = buildServer({ inferenceServiceUrl: "http://unused", resultCacheTtlSeconds: 3600 }, client);
 
   const res = await app.inject({
     method: "POST",
@@ -79,7 +79,7 @@ test("POST /predict rejects a request with no scene_id", async () => {
       throw new Error("not used");
     },
   );
-  const app = buildServer({ inferenceServiceUrl: "http://unused" }, client);
+  const app = buildServer({ inferenceServiceUrl: "http://unused", resultCacheTtlSeconds: 3600 }, client);
 
   const res = await app.inject({ method: "POST", url: "/predict", payload: {} });
 
@@ -93,7 +93,7 @@ test("POST /predict returns 503, not a raw 500, when the inference service is un
       throw new InferenceServiceUnavailableError(new Error("ECONNREFUSED"));
     },
   );
-  const app = buildServer({ inferenceServiceUrl: "http://unused" }, client);
+  const app = buildServer({ inferenceServiceUrl: "http://unused", resultCacheTtlSeconds: 3600 }, client);
 
   const res = await app.inject({
     method: "POST",

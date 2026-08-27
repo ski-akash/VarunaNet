@@ -7,6 +7,13 @@ export interface GatewayConfig {
   port: number;
   host: string;
   inferenceServiceUrl: string;
+  redisUrl: string;
+  // How long a scene's district-stats result stays in the aggregate cache
+  // before a fresh /scenes request re-runs inference. A Sentinel-1 scene is
+  // one pass every ~6-12 days (spec section 2 -- this is explicitly not a
+  // real-time system), so an hour-scale TTL is about caching repeat map
+  // views of the same pass, not about freshness.
+  resultCacheTtlSeconds: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -14,5 +21,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     port: Number(env.PORT ?? 3000),
     host: env.HOST ?? "0.0.0.0",
     inferenceServiceUrl: env.INFERENCE_SERVICE_URL ?? "http://localhost:8000",
+    redisUrl: env.REDIS_URL ?? "redis://localhost:6379",
+    resultCacheTtlSeconds: Number(env.RESULT_CACHE_TTL_SECONDS ?? 3600),
   };
 }

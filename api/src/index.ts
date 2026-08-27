@@ -1,8 +1,10 @@
 import { buildServer } from "./server.js";
 import { loadConfig } from "./config.js";
+import { createRedisConnection } from "./redisConnection.js";
 
 const config = loadConfig();
-const app = buildServer(config);
+const redis = createRedisConnection(config.redisUrl);
+const app = buildServer(config, undefined, redis);
 
 app
   .listen({ port: config.port, host: config.host })
