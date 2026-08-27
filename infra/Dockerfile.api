@@ -1,0 +1,52 @@
+# Node.js Fastify gateway image (api/).
+#
+# NOTE: not yet built or run. Docker (and colima, tried as a Docker-Desktop-
+# free alternative) was unavailable in the sandboxed environment this was
+# written in -- attempted `colima start`, which failed on
+# `mkdir /Users/<user>/.colima: operation not permitted`, a sandbox
+# restriction, not a config mistake to work around. Treat this as
+# reviewed-but-unverified until a real build has succeeded, same as
+# Dockerfile.serve and Dockerfile.train before it.
+
+# ---- build stage: compile TypeScript, install only production deps for the runtime stage
+FROM node:22-slim AS build
+WORKDIR /app
+
+COPY api/package.json api/package-lock.json ./
+RUN npm ci
+
+COPY api/tsconfig.json ./
+COPY api/src ./src
+RUN npm run build
+
+# A second, production-only install: the build stage's node_modules carries
+# typescript/tsx/@types/* (devDependencies), which the compiled dist/ output
+# never imports at runtime -- shipping them would be dead weight in the
+# final image for no benefit.
+RUN npm ci --omit=dev
+
+# ---- runtime stage: just the compiled output and its production deps
+FROM node:22-slim AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY api/package.json ./
+
+EXPOSE 3000
+
+# Runs as a non-root user. node:22-slim already ships a "node" user
+# (uid 1000) for exactly this purpose, so no separate useradd step is
+# needed the way Dockerfile.serve's python base requires.
+USER node
+
+# /health reports "degraded" (with an appropriate status code) rather than
+# crashing when the inference service is unreachable, so this asserts on
+# the payload's own status field, not just that something answered --
+# same reasoning as Dockerfile.serve's healthcheck.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:3000/health').then(r=>r.json()).then(b=>{if(b.status!=='ok')process.exit(1)}).catch(()=>process.exit(1))"
+
+CMD ["node", "dist/index.js"]

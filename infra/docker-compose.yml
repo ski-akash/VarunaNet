@@ -1,0 +1,161 @@
+# Brings up the whole stack with no cluster access, per spec section 9.
+# Run from the repo root: `docker compose -f infra/docker-compose.yml up`
+# (or `make dev`, see the root Makefile).
+#
+# NOT YET RUN. Docker was unavailable in the sandboxed environment this was
+# written in (colima, tried as a Docker-Desktop-free path to a real daemon,
+# failed on a sandbox permission error unmaking its config directory, not a
+# config mistake to work around). Reviewed against every service's own
+# README and .env.example, not build-tested end to end. Treat this as
+# reviewed-but-unverified, the same status Dockerfile.serve and
+# Dockerfile.train have carried since they were written.
+#
+# Honest gap this compose file cannot paper over: there is no real trained
+# checkpoint committed to the repo (correctly -- it's a multi-hundred-MB
+# build artifact that belongs on the cluster/W&B, not in git). `inference`
+# will fail its healthcheck and /predict will 503 until MODELS_DIR and
+# SCENES_DIR below are populated -- with either a real exported checkpoint
+# from the cluster, or the untrained local demo one from
+# `inference/stage_demo_scene.py` + `inference/export_onnx.py` (see
+# inference/README.md). This is a real limitation, not a bug in this file.
+
+services:
+  postgres:
+    # postgis/postgis bundles the extension precompiled -- simpler and
+    # more reliable than installing it into a plain postgres image by
+    # hand, and it's still exactly Postgres underneath (api/src/db/pool.ts
+    # doesn't know or care which image produced it).
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: varunanet
+      POSTGRES_PASSWORD: varunanet
+      POSTGRES_DB: varunanet
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Postgres's official image runs every *.sql file in
+      # docker-entrypoint-initdb.d/ once, on first init only -- exactly
+      # what's needed to apply api/src/db/schema.sql without a separate
+      # migration step for this project's current single-schema state.
+      - ../api/src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U varunanet"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    # Present per spec section 5's architecture diagram (raster/COG object
+    # storage). Not yet wired into any service's actual code --
+    # inference/service.py currently reads scenes from a local mounted
+    # directory (SCENES_DIR below), not S3 -- so this container runs but
+    # nothing talks to it today. Reserved for when scene/raster storage
+    # moves off local volumes, named here rather than left out silently.
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: varunanet
+      MINIO_ROOT_PASSWORD: varunanet123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  inference:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.serve
+    environment:
+      VARUNANET_MODEL_PATH: /models/model.onnx
+      VARUNANET_SCENE_ROOT: /scenes
+    volumes:
+      # Bind-mounted, not baked into the image (Dockerfile.serve's own
+      # design decision) -- populate these from the host before starting,
+      # see this file's own top comment.
+      - ${MODELS_DIR:-../demo_scenes}:/models:ro
+      - ${SCENES_DIR:-../demo_scenes}:/scenes:ro
+    ports:
+      - "8000:8000"
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    environment:
+      PORT: 3000
+      HOST: 0.0.0.0
+      INFERENCE_SERVICE_URL: http://inference:8000
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://varunanet:varunanet@postgres:5432/varunanet
+      CORS_ORIGINS: http://localhost:8080
+      # Empty (auth off) by default, matching api/.env.example -- this is
+      # a local demo stack, not a public deployment. Set API_KEYS in a
+      # .env file alongside this compose file to turn it on.
+      API_KEYS: ${API_KEYS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      inference:
+        condition: service_started
+    ports:
+      - "3000:3000"
+
+  worker:
+    # Same image as `api`, different entrypoint -- src/worker.ts is what
+    # actually consumes the BullMQ scene-processing queue (see
+    # api/README.md: "an HTTP server and a long-running inference worker
+    # scale and restart independently", which is exactly why this is its
+    # own compose service rather than folded into `api`).
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    command: ["node", "dist/worker.js"]
+    environment:
+      INFERENCE_SERVICE_URL: http://inference:8000
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://varunanet:varunanet@postgres:5432/varunanet
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      inference:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.frontend
+      args:
+        # Baked in at build time (Vite env vars are compile-time), pointed
+        # at the host-exposed gateway port rather than the in-compose
+        # service name "api", since this URL is read by the *browser*,
+        # which is outside the compose network entirely.
+        VITE_API_BASE_URL: http://localhost:3000
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  minio_data:
