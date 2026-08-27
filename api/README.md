@@ -69,6 +69,39 @@ Needs a local Redis for both running the gateway and running its Redis-backed te
 `redis://localhost:6379/15` by default (a separate DB index, not the default one) so
 running the tests doesn't collide with a real dev instance's data.
 
+## Live deployment
+
+The gateway is deployed and reachable publicly at **https://varunanet-api.vercel.app**,
+as a Vercel Node.js serverless function (`api/index.ts` — a file under a top-level `api/`
+directory inside this package, Vercel's own convention; `vercel.json` rewrites every
+path there so `/health`, `/chat`, etc. resolve as real clean paths). This is a separate
+Vercel project from the frontend's, same account, linked to the same GitHub repo.
+
+**Deliberately built without Redis.** This deployment exists specifically to make
+`/health`, `/predict`, and `/chat` reachable — none of them need Redis or the BullMQ
+worker, only `/scenes` does (see `server.ts`: scene routes only register when
+`redis && pgPool`). Hosting Redis and the inference service publicly is a real, separate,
+deferred piece (`VarunaNet_Spec.md`), not silently dropped — `/predict` on the live
+deployment correctly reports `"degraded"`/`inference: null` rather than crashing, since
+`INFERENCE_SERVICE_URL` has nothing reachable behind it yet.
+
+**Real infra chosen after two wrong first guesses, corrected in the open rather than
+silently**: Railway was first recommended as having "a real free tier" — checked, and it
+doesn't for a multi-service stack (needs a card, burns a one-time credit fast). Render
+was next, but its credit-card requirement for the free tier turned out to have genuinely
+conflicting reports online, including real user complaints of unexpected charges — not
+something to push the user toward without a confident answer. What's actually deployed:
+**Supabase** (Postgres+PostGIS, real free tier, no card) and **the user's own existing
+Vercel account** (Hobby plan, genuinely free forever, no card, already trusted and in
+use for the frontend) — chosen specifically because both are verified, not guessed.
+
+**A real Supabase networking gap hit and resolved**: Supabase's direct-connection host
+(`db.<ref>.supabase.co`) is IPv6-only by default (confirmed directly — `nslookup` for
+that host returns only an AAAA record, no A record), which this network's outbound
+connectivity couldn't reach. Fixed by using the **Session Pooler** connection string
+instead (`aws-0-<region>.pooler.supabase.com`), which Supabase's own docs confirm is
+IPv4-compatible on every plan tier, unlike the direct connection.
+
 ## A real hallucination caught live, and how it's actually prevented now
 
 Testing against a real (freshly-provisioned, empty) hosted database surfaced a genuine
