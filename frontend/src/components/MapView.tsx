@@ -286,9 +286,9 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
         // contract for a grounded LLM tool result, but not for coloring a
         // map where a district covered at a real, low, non-ranking
         // percentage should still read as "checked" rather than "no data".
-        const covered = (demo.districts ?? demo.worst_affected).filter(
-          (d) => !('tiles_covering' in d) || d.tiles_covering > 0,
-        )
+        const covered = demo.districts
+          ? demo.districts.filter((d) => d.tiles_covering > 0)
+          : demo.worst_affected
         if (covered.length === 0) return
         setFloodDemo(demo)
 
