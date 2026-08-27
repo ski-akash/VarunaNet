@@ -108,3 +108,14 @@ Needs a local Postgres+PostGIS for both running the gateway and its DB-backed te
 `brew install postgresql@18 postgis`, then `createdb varunanet_test && psql -d
 varunanet_test -f src/db/schema.sql` (tests default to
 `postgres://localhost:5432/varunanet_test`, override with `TEST_DATABASE_URL`).
+
+## CORS
+
+`server.ts` registers `@fastify/cors`, allowing the origins in `CORS_ORIGINS`
+(comma-separated, default `http://localhost:5173` — the Vite dev server). Found this was
+missing the way it actually bites: `curl` against `/health` returned a normal `200` and
+this process's own logs showed the request completing fine, while the real frontend tab
+reported "Backend unreachable" for the identical request — a browser silently drops a
+cross-origin response with no `Access-Control-Allow-Origin` header before the page's own
+`fetch()` ever sees it, and none of that shows up server-side. Pinned with a test that
+asserts the header is actually present, not just eyeballed once in a browser tab.

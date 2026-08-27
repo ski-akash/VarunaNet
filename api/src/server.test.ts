@@ -18,6 +18,33 @@ class FakeInferenceClient implements InferenceClient {
   }
 }
 
+test("responds with CORS headers so a browser fetch() from the frontend origin isn't rejected", async () => {
+  // A missing Access-Control-Allow-Origin header doesn't show up as a
+  // server-side error -- the server answers fine and this process's own
+  // logs show 200 -- the browser just silently refuses to hand the
+  // response to the page's own JS. Caught once by hand (curl succeeding
+  // while a real browser tab reported "Backend unreachable" for the exact
+  // same request); pinned here so it can't regress silently again.
+  const client = new FakeInferenceClient(
+    async () => ({ status: "ok" }),
+    async () => {
+      throw new Error("not used");
+    },
+  );
+  const app = buildServer(
+    { inferenceServiceUrl: "http://unused", resultCacheTtlSeconds: 3600, corsOrigins: ["http://localhost:5173"] },
+    client,
+  );
+
+  const res = await app.inject({
+    method: "GET",
+    url: "/health",
+    headers: { origin: "http://localhost:5173" },
+  });
+
+  assert.equal(res.headers["access-control-allow-origin"], "http://localhost:5173");
+});
+
 test("GET /health returns ok when the inference service is reachable", async () => {
   const client = new FakeInferenceClient(
     async () => ({ status: "ok" }),
