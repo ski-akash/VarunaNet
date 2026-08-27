@@ -33,6 +33,7 @@ import argparse
 import io
 import json
 import os
+import time
 import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -125,8 +126,25 @@ def download_geotiff(
     url = image.select(bands).getDownloadURL(
         {"region": aoi, "scale": scale, "crs": "EPSG:4326", "format": "GEO_TIFF"}
     )
-    response = requests.get(url, timeout=120)
-    response.raise_for_status()
+    # GEE's synchronous download backend returns real, transient 503s under
+    # load -- hit live during the first statewide multi-tile run, where it
+    # killed an otherwise-working ~35-tile job on tile 2. Retried with
+    # backoff rather than left to crash the whole run over one flaky
+    # request; a real (non-503) failure still raises after 3 tries.
+    last_error: requests.exceptions.HTTPError | None = None
+    for attempt in range(3):
+        response = requests.get(url, timeout=120)
+        if response.status_code == 503:
+            last_error = requests.exceptions.HTTPError(
+                f"503 Server Error (attempt {attempt + 1}/3)", response=response
+            )
+            time.sleep(5 * (attempt + 1))
+            continue
+        response.raise_for_status()
+        last_error = None
+        break
+    if last_error is not None:
+        raise last_error
     content_type = response.headers.get("content-type", "")
     if "zip" in content_type:
         with zipfile.ZipFile(io.BytesIO(response.content)) as zf:

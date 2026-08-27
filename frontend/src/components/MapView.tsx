@@ -45,6 +45,12 @@ const ASSAM_DISTRICTS_GEOJSON_URL = '/geo/assam_districts.geojson'
 // state-zoom display, the same way the district/state boundary files are
 // pre-built rather than fetched live in the browser.
 const ASSAM_RIVERS_GEOJSON_URL = '/geo/assam_rivers.geojson'
+// The real vectorized flood polygons data/build_assam_statewide.py (or,
+// for the single-AOI proof, data/build_assam_demo.py) writes -- per-pixel
+// Otsu+HAND flood extent, not the district-level percentage the severity
+// fill/badge use. Same file the district coloring's summary JSON sits
+// next to, loaded as a second, independently toggleable layer.
+const ASSAM_FLOOD_EXTENT_GEOJSON_URL = '/data/assam_flood_demo.geojson'
 
 // Everything outside Assam is empty black space, by intent -- this is a
 // single-subject map, not an atlas, so there is no land/water styling and
@@ -62,6 +68,11 @@ const STATE_OUTLINE_COLOR = '#e6e8ee'
 // thinner blue so they're visible without competing with it.
 const RIVER_COLOR_MAJOR = '#4fc3f7'
 const RIVER_COLOR_TRIBUTARY = '#2c6e8c'
+// Distinct from both the district severity palette and the river blues --
+// this is per-pixel flood extent, a different kind of claim (a measured
+// boundary, not a district-level share), so it reads as its own layer
+// rather than blending into either.
+const FLOOD_EXTENT_FILL_COLOR = '#e2636b'
 
 const BASE_STYLE: StyleSpecification = {
   version: 8,
@@ -89,6 +100,20 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
   const selectedDistrictRef = useRef<string | number | null>(null)
   const [selectedDistrictName, setSelectedDistrictName] = useState<string | null>(null)
   const [floodDemo, setFloodDemo] = useState<AssamFloodDemo | null>(null)
+  const [layersChecked, setLayersChecked] = useState<Record<string, boolean>>({
+    'flood-extent': false,
+  })
+
+  function toggleLayer(id: string) {
+    setLayersChecked((prev) => {
+      const next = { ...prev, [id]: !prev[id] }
+      const map = mapRef.current
+      if (map !== null && map.getLayer('flood-extent-fill')) {
+        map.setLayoutProperty('flood-extent-fill', 'visibility', next[id] ? 'visible' : 'none')
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     onSelectionChange?.(selectedDistrictName)
@@ -141,6 +166,7 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
       })
       map.addSource('assam-state', { type: 'geojson', data: ASSAM_STATE_GEOJSON_URL })
       map.addSource('assam-rivers', { type: 'geojson', data: ASSAM_RIVERS_GEOJSON_URL })
+      map.addSource('assam-flood-extent', { type: 'geojson', data: ASSAM_FLOOD_EXTENT_GEOJSON_URL })
 
       map.addLayer({
         id: 'district-fill',
@@ -194,6 +220,20 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
         },
       })
 
+      // Off by default (layout visibility 'none'), toggled from the
+      // Layers panel -- see toggleLayer, which flips this exact property.
+      // Never fetched/added conditionally: the geojson request is small
+      // (it's a static file, not a live query) and district clicks/hover
+      // above already establish the pattern of adding every real layer up
+      // front rather than lazily on first toggle.
+      map.addLayer({
+        id: 'flood-extent-fill',
+        type: 'fill',
+        source: 'assam-flood-extent',
+        layout: { visibility: 'none' },
+        paint: { 'fill-color': FLOOD_EXTENT_FILL_COLOR, 'fill-opacity': 0.55 },
+      })
+
       let hoveredDistrict: string | number | null = null
       map.on('mousemove', 'district-fill', (event) => {
         const feature = event.features?.[0]
@@ -239,11 +279,21 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
       // *after* the initial addLayer above, once the fetch resolves,
       // rather than blocking the map's first paint on a network request.
       fetchAssamFloodDemo().then((demo) => {
-        if (!demo || demo.worst_affected.length === 0) return
+        if (!demo) return
+        // Prefer the full per-district breakdown (a statewide build) so
+        // every genuinely-covered district gets colored, not just the top
+        // 5 worst_affected -- summarize()'s 5-item limit is the right
+        // contract for a grounded LLM tool result, but not for coloring a
+        // map where a district covered at a real, low, non-ranking
+        // percentage should still read as "checked" rather than "no data".
+        const covered = (demo.districts ?? demo.worst_affected).filter(
+          (d) => !('tiles_covering' in d) || d.tiles_covering > 0,
+        )
+        if (covered.length === 0) return
         setFloodDemo(demo)
 
-        const maxPercent = Math.max(...demo.worst_affected.map((d) => d.flooded_percent))
-        const severityPairs = demo.worst_affected.flatMap((d) => [
+        const maxPercent = Math.max(...covered.map((d) => d.flooded_percent))
+        const severityPairs = covered.flatMap((d) => [
           d.name,
           severityColor(maxPercent > 0 ? d.flooded_percent / maxPercent : 0),
         ])
@@ -312,7 +362,7 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
           <span className="current-location">{selectedDistrictName}</span>
         </div>
       )}
-      <LayerToggles />
+      <LayerToggles checked={layersChecked} onToggle={toggleLayer} />
       <SeverityLegend />
       {floodDemo && <AssamFloodDemoBadge demo={floodDemo} />}
     </div>

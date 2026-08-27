@@ -19,6 +19,17 @@ export interface AssamFloodDistrict {
   flooded_percent: number
 }
 
+// Only present on a statewide build (data/build_assam_statewide.py +
+// data/add_district_breakdown.py), not the single-AOI one
+// (data/build_assam_demo.py) -- every district, not just the top 5
+// worst_affected, so the report viewer can look up an arbitrary selected
+// district's real number instead of only the ones bad enough to rank.
+// tiles_covering distinguishes "checked, genuinely 0%" from "never
+// covered" -- both would otherwise read as flooded_percent: 0.
+export interface AssamFloodDistrictFull extends AssamFloodDistrict {
+  tiles_covering: number
+}
+
 export interface AssamFloodDemo {
   scene_id: string
   dry_reference_scene_id: string
@@ -33,6 +44,7 @@ export interface AssamFloodDemo {
   districts_affected: number
   total_flooded_hectares: number
   worst_affected: AssamFloodDistrict[]
+  districts?: AssamFloodDistrictFull[]
 }
 
 const ASSAM_FLOOD_DEMO_URL = '/data/assam_flood_demo.json'
