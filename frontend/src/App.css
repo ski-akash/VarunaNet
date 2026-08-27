@@ -233,15 +233,21 @@
 
 .chat-panel-input-row {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
   padding: 12px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.chat-panel-input-row input {
+.chat-panel-input-row textarea {
   flex: 1;
   min-width: 0;
+  /* Height is driven by ChatPanel's own resize logic (grows with content
+     up to INPUT_MAX_HEIGHT_PX, then scrolls) -- this is just the
+     single-line starting point and the cap. */
+  min-height: 34px;
+  max-height: 120px;
   padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -249,9 +255,12 @@
   color: var(--text-h);
   font-family: var(--sans);
   font-size: 13px;
+  line-height: 1.4;
+  resize: none;
+  overflow-y: auto;
 }
 
-.chat-panel-input-row input:disabled {
+.chat-panel-input-row textarea:disabled {
   color: var(--text);
   cursor: not-allowed;
 }

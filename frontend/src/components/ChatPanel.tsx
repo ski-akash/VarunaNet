@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { sendChatMessage, ChatUnavailableError, type ToolCall } from '../lib/apiClient'
+
+const INPUT_MAX_HEIGHT_PX = 120
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'error'
@@ -19,6 +21,18 @@ export default function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // The input grows with what's typed (up to INPUT_MAX_HEIGHT_PX, then
+  // scrolls) instead of a fixed-height single-line box -- a long question
+  // used to get clipped rather than fully visible, which read as broken
+  // even though sending still worked underneath.
+  function resizeTextarea() {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, INPUT_MAX_HEIGHT_PX)}px`
+  }
 
   async function handleSend() {
     const message = input.trim()
@@ -26,6 +40,10 @@ export default function ChatPanel() {
 
     setMessages((prev) => [...prev, { role: 'user', text: message }])
     setInput('')
+    // Collapse back to one line immediately, in the same tick as clearing
+    // the value -- waiting for the next render would show an empty but
+    // still-tall box for a frame.
+    requestAnimationFrame(resizeTextarea)
     setIsSending(true)
 
     try {
@@ -80,13 +98,24 @@ export default function ChatPanel() {
         {isSending && <p className="chat-panel-placeholder-text">Thinking…</p>}
       </div>
       <div className="chat-panel-input-row">
-        <input
-          type="text"
-          placeholder="Which districts are worst hit this week?"
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          placeholder="Which districts are worst hit?"
           value={input}
-          onChange={(event) => setInput(event.target.value)}
+          onChange={(event) => {
+            setInput(event.target.value)
+            resizeTextarea()
+          }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') handleSend()
+            // Enter sends; Shift+Enter inserts a newline, standard chat
+            // convention -- a flood-report question is realistically ever
+            // going to be more than one or two lines, but the option to
+            // wrap without sending should still exist.
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              handleSend()
+            }
           }}
           disabled={isSending}
           aria-label="Chat input"
