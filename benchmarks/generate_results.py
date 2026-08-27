@@ -16,10 +16,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from benchmarks.evaluate import (
+    all_dry_predict,
     build_terrain_cache,
     compute_per_event_otsu_thresholds,
     evaluate_baseline,
+    make_otsu_hand_permanent_water_predict,
     make_otsu_hand_predict,
+    make_otsu_permanent_water_predict,
     make_otsu_predict,
     make_random_forest_predict,
     train_random_forest_baseline,
@@ -52,12 +55,35 @@ def run_official_split(
     # Thresholds come from the test set's own chips, pooled per event --
     # see benchmarks/evaluate.py's compute_per_event_otsu_thresholds.
     event_thresholds = compute_per_event_otsu_thresholds(test_dataset)
+    jrc_dir = dem_dir.parent / "JRCWaterHand"
     results = {
+        # The degenerate control, first: every real baseline's OA below
+        # should be read against this one's (spec section 15.1) -- how
+        # much of a published OA figure is available for free.
+        "All-dry (control)": evaluate_baseline(
+            all_dry_predict, test_dataset, dem_dir, terrain_cache
+        ),
         "Otsu": evaluate_baseline(
             make_otsu_predict(event_thresholds), test_dataset, dem_dir, terrain_cache
         ),
         "Otsu + HAND": evaluate_baseline(
             make_otsu_hand_predict(event_thresholds), test_dataset, dem_dir, terrain_cache
+        ),
+        # spec section 15.2 Step 1: reproduces the published Brahmaputra
+        # change-detection paper's pipeline (Otsu -> remove permanent
+        # water) as a like-for-like baseline against that paper's own OA
+        # figures.
+        "Otsu + permanent-water removal": evaluate_baseline(
+            make_otsu_permanent_water_predict(event_thresholds, jrc_dir),
+            test_dataset,
+            dem_dir,
+            terrain_cache,
+        ),
+        "Otsu + HAND + permanent-water removal": evaluate_baseline(
+            make_otsu_hand_permanent_water_predict(event_thresholds, jrc_dir),
+            test_dataset,
+            dem_dir,
+            terrain_cache,
         ),
     }
     rf_model = train_random_forest_baseline(train_dataset, dem_dir, terrain_cache=terrain_cache)
@@ -85,15 +111,24 @@ def _summary_table(
     counts before computing the metric, so each pixel counts equally,
     while the per-chip mean gives a tiny chip the same weight as a large
     one. Neither is wrong; mixing them in one comparison is.
+
+    OA and Kappa are computed from the same pooled confusion counts (not a
+    separate summary) and included here rather than left in stdout/this
+    file's own docstrings -- spec section 15.1's own gate is a table
+    stating where this project's OA sits against the published Brahmaputra
+    papers' 93-95%, and that table has to actually be in the regenerated
+    report to mean anything (this was flagged there as "remaining Step 0
+    work" and is closed out here).
     """
     header = (
         "| Model | Pooled IoU | Mean IoU | Median IoU | Mean F1 "
-        "| Mean Precision | Mean Recall | n |"
+        "| Mean Precision | Mean Recall | OA | Kappa | n |"
     )
-    separator = "|---|---|---|---|---|---|---|---|"
+    separator = "|---|---|---|---|---|---|---|---|---|---|"
     rows = [
         f"| {name} | {pooled[name].iou:.3f} | {s.mean_iou:.3f} | {s.median_iou:.3f} "
-        f"| {s.mean_f1:.3f} | {s.mean_precision:.3f} | {s.mean_recall:.3f} | {s.n_chips} |"
+        f"| {s.mean_f1:.3f} | {s.mean_precision:.3f} | {s.mean_recall:.3f} "
+        f"| {pooled[name].overall_accuracy:.4f} | {pooled[name].kappa:.3f} | {s.n_chips} |"
         for name, s in summaries.items()
     ]
     return "\n".join([header, separator, *rows])

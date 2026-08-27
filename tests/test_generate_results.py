@@ -235,13 +235,34 @@ def _write_dem(path: Path) -> None:
         dst.write(_valley_dem().astype(np.float32), 1)
 
 
+def _write_jrc(path: Path) -> None:
+    # Matches the real, already-binary JRCWaterHand chips (see
+    # benchmarks.evaluate._load_jrc_permanent_water's docstring) -- all
+    # zero (no permanent water) is enough for run_official_split's own
+    # test, which only checks which chips get scored, not the numbers.
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=CHIP_SIZE,
+        width=CHIP_SIZE,
+        count=1,
+        dtype=np.uint8,
+        crs="EPSG:4326",
+        transform=_TRANSFORM,
+    ) as dst:
+        dst.write(np.zeros((CHIP_SIZE, CHIP_SIZE), dtype=np.uint8), 1)
+
+
 def _make_chip(tmp_path: Path, chip_id: str, vv_db: float, vh_db: float) -> None:
     (tmp_path / "S1Hand").mkdir(exist_ok=True)
     (tmp_path / "LabelHand").mkdir(exist_ok=True)
     (tmp_path / "DEMHand").mkdir(exist_ok=True)
+    (tmp_path / "JRCWaterHand").mkdir(exist_ok=True)
     _write_s1_image(tmp_path / "S1Hand" / f"{chip_id}_S1Hand.tif", vv_db, vh_db)
     _write_label(tmp_path / "LabelHand" / f"{chip_id}_LabelHand.tif")
     _write_dem(tmp_path / "DEMHand" / f"{chip_id}_DEMHand.tif")
+    _write_jrc(tmp_path / "JRCWaterHand" / f"{chip_id}_JRCWaterHand.tif")
 
 
 def test_run_official_split_scores_only_test_chips(tmp_path):
@@ -262,6 +283,13 @@ def test_run_official_split_scores_only_test_chips(tmp_path):
         tmp_path / "S1Hand", tmp_path / "LabelHand", tmp_path / "DEMHand", splits_dir
     )
 
-    assert set(results.keys()) == {"Otsu", "Otsu + HAND", "Random Forest"}
+    assert set(results.keys()) == {
+        "All-dry (control)",
+        "Otsu",
+        "Otsu + HAND",
+        "Otsu + permanent-water removal",
+        "Otsu + HAND + permanent-water removal",
+        "Random Forest",
+    }
     for name, chip_metrics in results.items():
         assert [m.chip_id for m in chip_metrics] == ["Ghana_1"], name

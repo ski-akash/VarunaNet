@@ -10,26 +10,29 @@ benchmarked against come in Phase 3+.
 Trained (where applicable) on the official train split, scored on the official test
 split.
 
-| Model | Pooled IoU | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | n |
-|---|---|---|---|---|---|---|---|
-| Otsu | 0.479 | 0.304 | 0.177 | 0.425 | 0.455 | 0.584 | 90 |
-| Otsu + HAND | 0.491 | 0.309 | 0.182 | 0.434 | 0.475 | 0.579 | 90 |
-| Random Forest | 0.400 | 0.233 | 0.145 | 0.350 | 0.282 | 0.691 | 90 |
+| Model | Pooled IoU | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | OA | Kappa | n |
+|---|---|---|---|---|---|---|---|---|---|
+| All-dry (control) | 0.000 | 0.000 | 0.000 | nan | nan | 0.000 | 0.8749 | 0.000 | 90 |
+| Otsu | 0.479 | 0.304 | 0.177 | 0.425 | 0.455 | 0.584 | 0.8953 | 0.588 | 90 |
+| Otsu + HAND | 0.491 | 0.309 | 0.182 | 0.434 | 0.475 | 0.579 | 0.9009 | 0.602 | 90 |
+| Otsu + permanent-water removal | 0.265 | 0.189 | 0.097 | 0.298 | 0.407 | 0.398 | 0.8534 | 0.335 | 90 |
+| Otsu + HAND + permanent-water removal | 0.270 | 0.192 | 0.101 | 0.303 | 0.427 | 0.392 | 0.8592 | 0.345 | 90 |
+| Random Forest | 0.400 | 0.233 | 0.145 | 0.350 | 0.282 | 0.691 | 0.8608 | 0.493 | 90 |
 
 ### Per-event breakdown
 
-| Event | Otsu IoU | Otsu + HAND IoU | Random Forest IoU | n |
-|---|---|---|---|---|
-| Ghana | 0.252 | 0.252 | 0.186 | 11 |
-| India | 0.410 | 0.433 | 0.346 | 14 |
-| Mekong | 0.351 | 0.351 | 0.279 | 6 |
-| Nigeria | 0.284 | 0.286 | 0.258 | 4 |
-| Pakistan | 0.109 | 0.110 | 0.117 | 6 |
-| Paraguay | 0.395 | 0.397 | 0.218 | 14 |
-| Somalia | 0.210 | 0.211 | 0.183 | 6 |
-| Spain | 0.421 | 0.421 | 0.376 | 6 |
-| Sri-Lanka | 0.378 | 0.380 | 0.293 | 9 |
-| USA | 0.146 | 0.160 | 0.113 | 14 |
+| Event | All-dry (control) IoU | Otsu IoU | Otsu + HAND IoU | Otsu + permanent-water removal IoU | Otsu + HAND + permanent-water removal IoU | Random Forest IoU | n |
+|---|---|---|---|---|---|---|---|
+| Ghana | 0.000 | 0.252 | 0.252 | 0.191 | 0.191 | 0.186 | 11 |
+| India | 0.000 | 0.410 | 0.433 | 0.260 | 0.273 | 0.346 | 14 |
+| Mekong | 0.000 | 0.351 | 0.351 | 0.332 | 0.332 | 0.279 | 6 |
+| Nigeria | 0.000 | 0.284 | 0.286 | 0.251 | 0.253 | 0.258 | 4 |
+| Pakistan | 0.000 | 0.109 | 0.110 | 0.090 | 0.090 | 0.117 | 6 |
+| Paraguay | 0.000 | 0.395 | 0.397 | 0.193 | 0.196 | 0.218 | 14 |
+| Somalia | 0.000 | 0.210 | 0.211 | 0.210 | 0.211 | 0.183 | 6 |
+| Spain | 0.000 | 0.421 | 0.421 | 0.272 | 0.272 | 0.376 | 6 |
+| Sri-Lanka | 0.000 | 0.378 | 0.380 | 0.124 | 0.123 | 0.293 | 9 |
+| USA | 0.000 | 0.146 | 0.160 | 0.074 | 0.081 | 0.113 | 14 |
 
 **Two IoU columns, and they are not interchangeable.** **Pooled IoU** sums every chip's
 confusion counts and computes the metric once from the total, so every pixel counts
@@ -54,11 +57,11 @@ both train and test, so a model can partly succeed by fitting an event's specifi
 terrain and backscatter rather than truly generalizing to conditions it has never
 seen.
 
-| Model | Pooled IoU | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | n |
-|---|---|---|---|---|---|---|---|
-| Otsu | 0.453 | 0.302 | 0.203 | 0.446 | 0.423 | 0.581 | 431 |
-| Otsu + HAND | 0.463 | 0.305 | 0.212 | 0.451 | 0.437 | 0.575 | 431 |
-| Random Forest | 0.330 | 0.206 | 0.113 | 0.331 | 0.251 | 0.676 | 431 |
+| Model | Pooled IoU | Mean IoU | Median IoU | Mean F1 | Mean Precision | Mean Recall | OA | Kappa | n |
+|---|---|---|---|---|---|---|---|---|---|
+| Otsu | 0.453 | 0.302 | 0.203 | 0.446 | 0.423 | 0.581 | 0.9044 | 0.571 | 431 |
+| Otsu + HAND | 0.463 | 0.305 | 0.212 | 0.451 | 0.437 | 0.575 | 0.9089 | 0.583 | 431 |
+| Random Forest | 0.330 | 0.206 | 0.113 | 0.331 | 0.251 | 0.676 | 0.8446 | 0.415 | 431 |
 
 ### Per-event breakdown
 

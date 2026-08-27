@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
+import rasterio
 from sklearn.ensemble import RandomForestClassifier
 
 from benchmarks.metrics import (
@@ -44,6 +45,7 @@ from data.chip_terrain import (
     get_terrain,
     load_dem,
 )
+from data.permanent_water import compute_flood_extent
 from data.sen1floods11 import Sen1Floods11Dataset, Sen1Floods11Sample
 
 # Re-exported from data.chip_terrain (see that module, shared with
@@ -146,6 +148,67 @@ def make_otsu_hand_predict(event_thresholds: dict[str, float]) -> PredictFn:
         if threshold is None:
             return np.zeros(band.shape, dtype=bool)
         return otsu_hand_water_mask(band, hand, slope, otsu_threshold=threshold)
+
+    return predict
+
+
+def _load_jrc_permanent_water(chip_id: str, jrc_dir: str | Path) -> np.ndarray:
+    """
+    Reads a *_JRCWaterHand.tif chip. Unlike data/permanent_water.py's
+    compute_permanent_water_mask (built for a raw JRC occurrence layer,
+    0-100), Sen1Floods11's shipped JRCWaterHand chips are already binary
+    (1 band, uint8, 0/1) -- confirmed directly against a real chip
+    (India_900498: only values {0, 1} present), the same thing
+    training/sen1floods11_dataset.py's own _load_jrc_permanent_water found
+    for the ChangeAwareUNet baseline channel. So this reads the chip
+    straight as a boolean mask rather than thresholding it a second time.
+    """
+    with rasterio.open(Path(jrc_dir) / f"{chip_id}_JRCWaterHand.tif") as src:
+        return src.read(1).astype(bool)
+
+
+def make_otsu_permanent_water_predict(
+    event_thresholds: dict[str, float], jrc_dir: str | Path
+) -> PredictFn:
+    """
+    spec section 15.2 Step 1: the Brahmaputra change-detection paper's
+    pipeline is Otsu -> remove permanent water -> remove terrain shadow.
+    This is the middle step, layered on top of the already-fixed Otsu
+    baseline (per-event VH threshold, denoised -- see
+    compute_per_event_otsu_thresholds) rather than reproducing the
+    original per-chip-VV version, since that would reintroduce a bug this
+    project already found and fixed.
+    """
+
+    def predict(sample: Sen1Floods11Sample, slope: np.ndarray, hand: np.ndarray) -> np.ndarray:
+        band = _smoothed_otsu_band(sample)
+        threshold = event_thresholds.get(event_name(sample.chip_id))
+        water = (
+            otsu_water_mask(band, threshold)
+            if threshold is not None
+            else np.zeros(band.shape, dtype=bool)
+        )
+        permanent = _load_jrc_permanent_water(sample.chip_id, jrc_dir)
+        return compute_flood_extent(water, permanent)
+
+    return predict
+
+
+def make_otsu_hand_permanent_water_predict(
+    event_thresholds: dict[str, float], jrc_dir: str | Path
+) -> PredictFn:
+    """Otsu + HAND/slope masking, then permanent-water removal on top."""
+
+    def predict(sample: Sen1Floods11Sample, slope: np.ndarray, hand: np.ndarray) -> np.ndarray:
+        band = _smoothed_otsu_band(sample)
+        threshold = event_thresholds.get(event_name(sample.chip_id))
+        water = (
+            otsu_hand_water_mask(band, hand, slope, otsu_threshold=threshold)
+            if threshold is not None
+            else np.zeros(band.shape, dtype=bool)
+        )
+        permanent = _load_jrc_permanent_water(sample.chip_id, jrc_dir)
+        return compute_flood_extent(water, permanent)
 
     return predict
 
@@ -273,6 +336,7 @@ if __name__ == "__main__":
     IMAGE_DIR = DATA_ROOT / "S1Hand"
     LABEL_DIR = DATA_ROOT / "LabelHand"
     DEM_DIR = DATA_ROOT / "DEMHand"
+    JRC_DIR = DATA_ROOT / "JRCWaterHand"
     SPLITS_DIR = DATA_ROOT / "splits"
 
     train_dataset = Sen1Floods11Dataset(IMAGE_DIR, LABEL_DIR, SPLITS_DIR / "flood_train_data.csv")
@@ -298,3 +362,23 @@ if __name__ == "__main__":
     rf_model = train_random_forest_baseline(train_dataset, DEM_DIR)
     rf_results = evaluate_baseline(make_random_forest_predict(rf_model), test_dataset, DEM_DIR)
     print_report("Random Forest", rf_results)
+
+    # spec section 15.2 Step 1: reproduce the published Brahmaputra
+    # change-detection paper's pipeline (Otsu -> remove permanent water ->
+    # remove terrain shadow) as a like-for-like baseline. This project
+    # already has Otsu and Otsu+HAND; permanent-water removal is the step
+    # that turns "water" into "flood", per that paper's own framing.
+    print_report(
+        "Otsu + permanent-water removal",
+        evaluate_baseline(
+            make_otsu_permanent_water_predict(event_thresholds, JRC_DIR), test_dataset, DEM_DIR
+        ),
+    )
+    print_report(
+        "Otsu + HAND + permanent-water removal",
+        evaluate_baseline(
+            make_otsu_hand_permanent_water_predict(event_thresholds, JRC_DIR),
+            test_dataset,
+            DEM_DIR,
+        ),
+    )

@@ -19,10 +19,13 @@ from benchmarks.evaluate import (
     compute_terrain_layers,
     evaluate_baseline,
     load_dem,
+    make_otsu_hand_permanent_water_predict,
     make_otsu_hand_predict,
+    make_otsu_permanent_water_predict,
     make_otsu_predict,
     train_random_forest_baseline,
 )
+from data.chip_terrain import get_terrain
 from data.contract import LABEL_NON_WATER, LABEL_WATER
 from data.sen1floods11 import Sen1Floods11Dataset, Sen1Floods11Sample
 
@@ -121,6 +124,24 @@ def _make_fixture(tmp_path: Path, chip_id: str, vv_db: float, vh_db: float) -> N
     _write_dem(tmp_path / "DEMHand" / f"{chip_id}_DEMHand.tif", _valley_dem())
 
 
+def _write_jrc(path: Path, values: np.ndarray) -> None:
+    """Matches the real, already-binary JRCWaterHand chips (see
+    benchmarks.evaluate._load_jrc_permanent_water's docstring): 1 band,
+    uint8, 0/1 -- not a raw 0-100 occurrence layer."""
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=CHIP_SIZE,
+        width=CHIP_SIZE,
+        count=1,
+        dtype=np.uint8,
+        crs="EPSG:4326",
+        transform=_TRANSFORM,
+    ) as dst:
+        dst.write(values.astype(np.uint8), 1)
+
+
 def _write_split(tmp_path: Path, chip_ids: list[str]) -> Path:
     split_csv = tmp_path / "split.csv"
     lines = [f"{cid}_S1Hand.tif,{cid}_LabelHand.tif" for cid in chip_ids]
@@ -208,6 +229,58 @@ def test_compute_per_event_otsu_thresholds_omits_events_with_no_finite_pixels(tm
     assert thresholds == {}
 
 
+def test_otsu_permanent_water_predict_removes_flood_flags_that_are_permanent_water(tmp_path):
+    # Bolivia_1 (very low VH, water-like) vs. Bolivia_2 (much higher VH,
+    # land-like) gives compute_per_event_otsu_thresholds a real bimodal
+    # histogram to split, same reasoning as the pooling test above -- so
+    # make_otsu_predict actually flags Bolivia_1 as water somewhere before
+    # permanent-water removal has anything real to remove.
+    _make_fixture(tmp_path, "Bolivia_1", vv_db=-20.0, vh_db=-25.0)
+    _make_fixture(tmp_path, "Bolivia_2", vv_db=-8.0, vh_db=-12.0)
+    (tmp_path / "JRCWaterHand").mkdir(exist_ok=True)
+    _write_jrc(
+        tmp_path / "JRCWaterHand" / "Bolivia_1_JRCWaterHand.tif",
+        np.ones((CHIP_SIZE, CHIP_SIZE)),
+    )
+    split_csv = _write_split(tmp_path, ["Bolivia_1", "Bolivia_2"])
+    dataset = Sen1Floods11Dataset(tmp_path / "S1Hand", tmp_path / "LabelHand", split_csv)
+    thresholds = compute_per_event_otsu_thresholds(dataset)
+    sample = dataset[0]  # Bolivia_1
+    slope, hand = get_terrain(sample.chip_id, tmp_path / "DEMHand", None)
+
+    plain_prediction = make_otsu_predict(thresholds)(sample, slope, hand)
+    assert plain_prediction.any(), "fixture is set up wrong if Otsu finds no water at all here"
+
+    permanent_water_prediction = make_otsu_permanent_water_predict(
+        thresholds, tmp_path / "JRCWaterHand"
+    )(sample, slope, hand)
+    # Bolivia_1's JRC chip is *entirely* permanent water, so every pixel
+    # Otsu flagged as water must be removed -- flood extent = water minus
+    # permanent water = nothing, when permanent water covers the whole chip.
+    assert not permanent_water_prediction.any()
+
+
+def test_otsu_hand_permanent_water_predict_removes_flood_flags_that_are_permanent_water(tmp_path):
+    _make_fixture(tmp_path, "Bolivia_1", vv_db=-20.0, vh_db=-25.0)
+    _make_fixture(tmp_path, "Bolivia_2", vv_db=-8.0, vh_db=-12.0)
+    (tmp_path / "JRCWaterHand").mkdir(exist_ok=True)
+    _write_jrc(
+        tmp_path / "JRCWaterHand" / "Bolivia_1_JRCWaterHand.tif",
+        np.ones((CHIP_SIZE, CHIP_SIZE)),
+    )
+    split_csv = _write_split(tmp_path, ["Bolivia_1", "Bolivia_2"])
+    dataset = Sen1Floods11Dataset(tmp_path / "S1Hand", tmp_path / "LabelHand", split_csv)
+    thresholds = compute_per_event_otsu_thresholds(dataset)
+    sample = dataset[0]
+    slope, hand = get_terrain(sample.chip_id, tmp_path / "DEMHand", None)
+
+    prediction = make_otsu_hand_permanent_water_predict(thresholds, tmp_path / "JRCWaterHand")(
+        sample, slope, hand
+    )
+
+    assert not prediction.any()
+
+
 def test_train_random_forest_baseline_produces_a_working_model(tmp_path):
     _make_fixture(tmp_path, "Bolivia_1", vv_db=-20.0, vh_db=-25.0)
     _make_fixture(tmp_path, "Ghana_1", vv_db=-8.0, vh_db=-12.0)
@@ -285,7 +358,10 @@ def test_evaluate_baseline_uses_terrain_cache_instead_of_dem_dir(tmp_path):
 
     # dem_dir points nowhere; this only succeeds if the cache is actually used.
     results = evaluate_baseline(
-        make_otsu_predict(event_thresholds), dataset, tmp_path / "nonexistent_dem_dir", terrain_cache
+        make_otsu_predict(event_thresholds),
+        dataset,
+        tmp_path / "nonexistent_dem_dir",
+        terrain_cache,
     )
 
     assert len(results) == 1
