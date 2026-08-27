@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { SceneQueue } from "../sceneQueue.js";
 import type { ResultCache } from "../resultCache.js";
+import type { SceneRepository } from "../db/sceneRepository.js";
 
 interface EnqueueBody {
   scene_id?: unknown;
@@ -16,6 +17,7 @@ export function registerScenesRoutes(
   app: FastifyInstance,
   queue: SceneQueue,
   cache: ResultCache,
+  repository: SceneRepository,
 ): void {
   app.post<{ Body: EnqueueBody }>("/scenes", async (req, reply) => {
     const sceneId = req.body?.scene_id;
@@ -40,6 +42,16 @@ export function registerScenesRoutes(
     const cached = await cache.get(sceneId);
     if (cached) {
       return { status: "done", source: "cache", result: cached };
+    }
+
+    // A miss here means either the result was never queued, or it was and
+    // the cache entry has since expired -- Postgres is the durable copy,
+    // so check it before falling through to "not found". A hit here also
+    // repopulates the cache, so the next read doesn't pay this query again.
+    const stored = await repository.get(sceneId);
+    if (stored) {
+      await cache.set(sceneId, stored);
+      return { status: "done", source: "database", result: stored };
     }
 
     const job = await queue.getJob(sceneId);

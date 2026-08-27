@@ -8,6 +8,7 @@ export interface GatewayConfig {
   host: string;
   inferenceServiceUrl: string;
   redisUrl: string;
+  databaseUrl: string;
   // How long a scene's district-stats result stays in the aggregate cache
   // before a fresh /scenes request re-runs inference. A Sentinel-1 scene is
   // one pass every ~6-12 days (spec section 2 -- this is explicitly not a
@@ -22,6 +23,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     host: env.HOST ?? "0.0.0.0",
     inferenceServiceUrl: env.INFERENCE_SERVICE_URL ?? "http://localhost:8000",
     redisUrl: env.REDIS_URL ?? "redis://localhost:6379",
+    databaseUrl: env.DATABASE_URL ?? "postgres://localhost:5432/varunanet",
     resultCacheTtlSeconds: Number(env.RESULT_CACHE_TTL_SECONDS ?? 3600),
   };
 }

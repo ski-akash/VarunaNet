@@ -3,6 +3,8 @@ import { createRedisConnection } from "./redisConnection.js";
 import { HttpInferenceClient } from "./inferenceClient.js";
 import { ResultCache } from "./resultCache.js";
 import { createSceneWorker } from "./sceneWorker.js";
+import { createPgPool } from "./db/pool.js";
+import { SceneRepository } from "./db/sceneRepository.js";
 
 // Separate process from the HTTP server (src/index.ts) -- run with
 // `npm run worker`. This is what actually pulls jobs off the scene-
@@ -12,8 +14,9 @@ const config = loadConfig();
 const redis = createRedisConnection(config.redisUrl);
 const inference = new HttpInferenceClient(config.inferenceServiceUrl);
 const cache = new ResultCache(redis, config.resultCacheTtlSeconds);
+const repository = new SceneRepository(createPgPool(config.databaseUrl));
 
-const worker = createSceneWorker(redis, inference, cache);
+const worker = createSceneWorker(redis, inference, cache, repository);
 
 worker.on("completed", (job) => {
   console.log(`scene ${job.data.sceneId} processed`);

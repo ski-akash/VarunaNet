@@ -31,4 +31,8 @@ checkpoints/
 
 # Hydra's default per-run output directory.
 outputs/
+
+# Local Redis snapshot -- written to the cwd redis-server was started from
+# during local dev/testing, never something to commit.
+dump.rdb
 .vercel

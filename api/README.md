@@ -73,5 +73,38 @@ running the tests doesn't collide with a real dev instance's data.
 cache (Redis jobs 3 and 4 — the latter needs Phase 6's agent loop to exist first), the
 LLM tool-calling agent loop and tool registry, SSE streaming, and the rest of the
 Phase 6 REST surface (`query_flood_stats`, `get_worst_affected`, `set_map_view`, etc.).
-PostGIS isn't wired in either — `ResultCache` is a cache in front of computed results,
-not the system of record; that's the next piece.
+
+## PostGIS: the system of record
+
+`ResultCache` above is a cache, not a database — a cache entry expiring should not mean
+a scored scene's history is gone. `src/db/` is the durable store behind it:
+
+- **`src/db/schema.sql`** — `scenes` (one row per scored scene: the typed summary
+  columns plus the full JSON response in `raw_result`, so a field the Python side adds
+  later is queryable immediately, without a migration) and `district_impacts` (per-
+  district rows). Run once against a fresh database: `psql -d varunanet -f
+  src/db/schema.sql`.
+  **Known real limitation, stated rather than hidden**: `inference/service.py`'s
+  `/predict` only returns the **top-5 worst-affected districts** (see
+  `inference/districts.py`'s `summarize()`) and no raw polygon geometry — geometry is
+  explicitly opt-in and not built yet (`inference/README.md`). So `district_impacts`
+  holds the top 5, not the full district table, and there's no `flood_polygons`
+  geometry table yet — both wait on the Python service exposing more than it does today.
+- **`src/db/pool.ts`** — constructs the `pg.Pool` from `DATABASE_URL`
+  (`postgres://localhost:5432/varunanet` default), the same "one place reads the env
+  var" pattern as `redisConnection.ts`.
+- **`src/db/sceneRepository.ts`** (`SceneRepository`) — `save()` upserts a scene's
+  summary row and replaces its district rows in one transaction (so a re-run doesn't
+  accumulate duplicate district rows); `get()` reads a scene back; `worstAffected()`
+  ranks across all scored scenes. `save()` throws rather than silently writing a
+  partial/null value if the inference service's response is ever missing a field the
+  schema requires — a caught bug beats a row with a false zero in it.
+- **`src/sceneWorker.ts`** now persists via `SceneRepository.save()` before writing to
+  the Redis cache, and `GET /scenes/:sceneId` falls back to Postgres (repopulating the
+  cache on a hit) before falling back to "not found" — so a result survives past the
+  cache's TTL.
+
+Needs a local Postgres+PostGIS for both running the gateway and its DB-backed tests:
+`brew install postgresql@18 postgis`, then `createdb varunanet_test && psql -d
+varunanet_test -f src/db/schema.sql` (tests default to
+`postgres://localhost:5432/varunanet_test`, override with `TEST_DATABASE_URL`).
