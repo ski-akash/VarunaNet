@@ -114,7 +114,10 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
       // requirement.) compact:true keeps it as a single (i) disclosure
       // rather than a permanent bar of text across the map.
       attributionControl: {
-        compact: true,
+        // false, not true: compact:true is the collapsed (i)-toggle form,
+        // which needs a click to open and a click to close -- the source
+        // list should just always be readable, no button.
+        compact: false,
         customAttribution:
           'Boundaries: <a href="https://github.com/datameet/maps" target="_blank" rel="noreferrer">DataMeet</a>, Census 2011 (CC BY 4.0) · Rivers: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors (ODbL)',
       },

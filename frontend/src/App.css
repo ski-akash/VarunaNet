@@ -103,6 +103,11 @@
   flex: 1;
   min-height: 0;
   width: 100%;
+  /* Separates the map's own bottom edge (where the attribution bar now
+     always sits, since it's no longer a collapsible (i) toggle) from the
+     time slider directly below it -- the .map-column gap alone (8px) read
+     as the two overlapping. */
+  margin-bottom: 6px;
 }
 
 .map-view {
@@ -111,6 +116,36 @@
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
+}
+
+/* The source-attribution bar (MapLibre's built-in control, compact:false
+   so it's always expanded -- see MapView.tsx) styled to match the app's
+   own dark theme instead of MapLibre's default light pill, and with a
+   comfortable margin off the map's edges instead of sitting flush in the
+   corner. */
+.map-view .maplibregl-ctrl-bottom-right {
+  margin: 0 10px 8px 0;
+}
+
+.map-view .maplibregl-ctrl-attrib {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.map-view .maplibregl-ctrl-attrib a {
+  color: var(--text-h);
+}
+
+/* compact:false never renders the (i) toggle button itself, but this
+   covers it defensively in case a MapLibre version brings it back. */
+.map-view .maplibregl-ctrl-attrib-button {
+  display: none;
 }
 
 .map-nav {
@@ -613,8 +648,8 @@
      which turned the circle into an oval instead of a bigger circle. */
   width: 30px;
   height: 30px;
-  border-color: #2c7fb8;
-  color: #2c7fb8;
+  border-color: #ffffff;
+  color: #ffffff;
   font-family: var(--sans);
   font-style: normal;
   font-size: 8px;
@@ -623,7 +658,7 @@
 }
 
 .assam-flood-demo-badge .flood-source-info-button:hover {
-  background: #2c7fb8;
+  background: #ffffff;
   color: var(--bg);
 }
 
@@ -634,5 +669,5 @@
      left boundary into whatever is behind it. */
   left: 0;
   right: auto;
-  border-color: #2c7fb8;
+  border-color: #ffffff;
 }
