@@ -606,10 +606,13 @@
 }
 
 .assam-flood-demo-badge .flood-source-info-button {
-  /* Wider than the base 24px circle -- "SAR" at any legible size doesn't
+  /* Bigger than the base 24px circle -- "SAR" at any legible size doesn't
      fit inside that diameter without touching or crossing the border,
-     which is what was actually happening (not just a centering issue). */
+     which is what was actually happening (not just a centering issue).
+     width AND height both set: a previous version only widened this,
+     which turned the circle into an oval instead of a bigger circle. */
   width: 30px;
+  height: 30px;
   border-color: #2c7fb8;
   color: #2c7fb8;
   font-family: var(--sans);
