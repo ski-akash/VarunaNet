@@ -47,7 +47,9 @@ export function buildServer(
   // fetch" and nothing useful appears server-side to explain why. Found by
   // comparing curl (which ignores CORS) against a real browser tab hitting
   // the exact same endpoint and getting a different outcome.
-  app.register(cors, { origin: config.corsOrigins ?? ["http://localhost:5173"] });
+  app.register(cors, {
+    origin: config.corsOrigins ?? ["http://localhost:5173", "http://127.0.0.1:5173"],
+  });
 
   app.register(rateLimit, {
     max: config.rateLimitMax ?? 120,

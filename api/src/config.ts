@@ -44,7 +44,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     inferenceServiceUrl: env.INFERENCE_SERVICE_URL ?? "http://localhost:8000",
     redisUrl: env.REDIS_URL ?? "redis://localhost:6379",
     databaseUrl: env.DATABASE_URL ?? "postgres://localhost:5432/varunanet",
-    corsOrigins: (env.CORS_ORIGINS ?? "http://localhost:5173").split(",").map((s) => s.trim()),
+    // Both localhost and 127.0.0.1 by default -- a browser treats them as
+    // different origins even though they resolve to the same machine, so
+    // whichever one the frontend happens to be opened at needs to be
+    // covered. Found live: /health answered 200 with no CORS header at all
+    // for an Origin of 127.0.0.1:5173 when only localhost:5173 was allowed,
+    // which a browser shows as an opaque "Backend unreachable" with nothing
+    // server-side to explain why.
+    corsOrigins: (env.CORS_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:5173")
+      .split(",")
+      .map((s) => s.trim()),
     resultCacheTtlSeconds: Number(env.RESULT_CACHE_TTL_SECONDS ?? 3600),
     apiKeys: (env.API_KEYS ?? "")
       .split(",")

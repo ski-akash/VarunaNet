@@ -45,6 +45,30 @@ test("responds with CORS headers so a browser fetch() from the frontend origin i
   assert.equal(res.headers["access-control-allow-origin"], "http://localhost:5173");
 });
 
+test("also allows 127.0.0.1:5173 by default, not just localhost:5173", async () => {
+  // A browser treats localhost and 127.0.0.1 as different origins even
+  // though both mean the same machine -- a real user hit exactly this: the
+  // gateway (built with only localhost:5173 allowed) silently rejected a
+  // frontend opened at 127.0.0.1:5173, shown as "Backend unreachable" with
+  // no error anywhere to explain why. Uses buildServer's own default (no
+  // corsOrigins passed), the actual code path index.ts runs.
+  const client = new FakeInferenceClient(
+    async () => ({ status: "ok" }),
+    async () => {
+      throw new Error("not used");
+    },
+  );
+  const app = buildServer({ inferenceServiceUrl: "http://unused", resultCacheTtlSeconds: 3600 }, client);
+
+  const res = await app.inject({
+    method: "GET",
+    url: "/health",
+    headers: { origin: "http://127.0.0.1:5173" },
+  });
+
+  assert.equal(res.headers["access-control-allow-origin"], "http://127.0.0.1:5173");
+});
+
 test("GET /health returns ok when the inference service is reachable", async () => {
   const client = new FakeInferenceClient(
     async () => ({ status: "ok" }),

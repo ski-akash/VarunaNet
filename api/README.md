@@ -221,6 +221,15 @@ script); caught by a real, reproducible failing assertion, not a flaky-looking o
   suite and `index.ts`). Caught by a test that actually sent two requests and checked the
   second was `429`, not by reasoning about the code.
 
+## CORS (localhost vs 127.0.0.1)
+
+`CORS_ORIGINS` defaults to **both** `http://localhost:5173` and `http://127.0.0.1:5173`,
+not just one. Found live, from a real report: a browser treats `localhost` and
+`127.0.0.1` as different origins even though they're the same machine, so a frontend
+opened at whichever one wasn't in the allow-list got a silent, unexplained "Backend
+unreachable" — the exact CORS failure mode below, just a variant the first fix (which
+only covered a single hardcoded origin) didn't anticipate.
+
 ## CORS
 
 `server.ts` registers `@fastify/cors`, allowing the origins in `CORS_ORIGINS`
