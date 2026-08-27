@@ -275,3 +275,27 @@ Run it:
 VARUNANET_MODEL_PATH=model.int8.onnx VARUNANET_SCENE_ROOT=/scenes \
   uvicorn inference.service:app
 ```
+
+**`stage_demo_scene.py`** — stages one real Sen1Floods11 chip as a scene this service can
+serve, for exercising the *full* stack (frontend → gateway → Redis → Postgres → this
+service) against real data locally, before real Assam Sentinel-1 ingestion exists (spec
+section 15.4, currently blocked on Earth Engine credentials this environment doesn't
+have). Reuses the exact same loading path training uses (`Sen1Floods11Dataset`,
+`data/chip_terrain.get_terrain`, `data/normalization.apply_normalization`) rather than
+re-deriving it — a served scene has to be normalized with the *same* statistics training
+used, or this reintroduces the train/serve mismatch the `VV_VH_ratio` bug already cost
+real debugging time to find.
+
+```
+python -m inference.stage_demo_scene India_900498 --out demo_scenes
+```
+
+Combined with a quick local export (`build_model()` → `export_onnx.export_checkpoint()`,
+same pattern `tests/test_export_onnx.py` uses, at `tile_size=512` to match a real chip),
+this verified the entire pipeline live end to end for the first time: a real HTTP request
+from a running frontend, through the Node gateway, through the BullMQ queue and Redis
+cache, into this service, back out through `PostGIS`. Result was `water_pixel_fraction:
+0.0` — expected and not a bug, since the model used was untrained (random init, exported
+purely to prove the wiring, not to predict anything real). `demo_scenes/` (the staged
+chip, the demo checkpoint, and the exported ONNX file) is gitignored — regenerable, not
+something to commit.

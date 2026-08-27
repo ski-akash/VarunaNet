@@ -35,4 +35,10 @@ outputs/
 # Local Redis snapshot -- written to the cwd redis-server was started from
 # during local dev/testing, never something to commit.
 dump.rdb
+
+# Local demo artifacts from inference/stage_demo_scene.py -- a staged real
+# chip plus an untrained demo checkpoint/ONNX export, used to smoke-test the
+# full stack end to end. Same reasoning as checkpoints/ above: regenerable,
+# large, never something to commit.
+demo_scenes/
 .vercel
