@@ -108,7 +108,19 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
     setLayersChecked((prev) => {
       const next = { ...prev, [id]: !prev[id] }
       const map = mapRef.current
-      if (map !== null && map.getLayer('flood-extent-fill')) {
+      if (map === null) return next
+      // Added on first toggle, not at map init -- see the addSource block
+      // in style.load for why this file is loaded lazily rather than
+      // unconditionally on every page view.
+      if (!map.getSource('assam-flood-extent')) {
+        map.addSource('assam-flood-extent', { type: 'geojson', data: ASSAM_FLOOD_EXTENT_GEOJSON_URL })
+        map.addLayer({
+          id: 'flood-extent-fill',
+          type: 'fill',
+          source: 'assam-flood-extent',
+          paint: { 'fill-color': FLOOD_EXTENT_FILL_COLOR, 'fill-opacity': 0.55 },
+        })
+      } else {
         map.setLayoutProperty('flood-extent-fill', 'visibility', next[id] ? 'visible' : 'none')
       }
       return next
@@ -166,7 +178,13 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
       })
       map.addSource('assam-state', { type: 'geojson', data: ASSAM_STATE_GEOJSON_URL })
       map.addSource('assam-rivers', { type: 'geojson', data: ASSAM_RIVERS_GEOJSON_URL })
-      map.addSource('assam-flood-extent', { type: 'geojson', data: ASSAM_FLOOD_EXTENT_GEOJSON_URL })
+      // assam-flood-extent is deliberately NOT added here. Even
+      // simplified, it's the heaviest file this map loads (a statewide
+      // flood-polygon merge, unlike the small hand-built boundary/river
+      // files) -- fetching it unconditionally on every page load, whether
+      // or not anyone opens the layer, is real bandwidth for a live
+      // public site with no payoff for a visitor who never checks the
+      // box. Added lazily in toggleLayer on first use instead.
 
       map.addLayer({
         id: 'district-fill',
@@ -218,20 +236,6 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
           'line-width': ['case', ['boolean', ['get', 'major'], false], 2.4, 1.1],
           'line-opacity': 0.85,
         },
-      })
-
-      // Off by default (layout visibility 'none'), toggled from the
-      // Layers panel -- see toggleLayer, which flips this exact property.
-      // Never fetched/added conditionally: the geojson request is small
-      // (it's a static file, not a live query) and district clicks/hover
-      // above already establish the pattern of adding every real layer up
-      // front rather than lazily on first toggle.
-      map.addLayer({
-        id: 'flood-extent-fill',
-        type: 'fill',
-        source: 'assam-flood-extent',
-        layout: { visibility: 'none' },
-        paint: { 'fill-color': FLOOD_EXTENT_FILL_COLOR, 'fill-opacity': 0.55 },
       })
 
       let hoveredDistrict: string | number | null = null

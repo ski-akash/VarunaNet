@@ -1,32 +1,545 @@
 {
-  "scene_id": "S1A_IW_GRDH_1SDV_20200715T114852_20200715T114917_033465_03E0BA_B218",
-  "dry_reference_scene_id": "S1A_IW_GRDH_1SDV_20200105T114848_20200105T114913_030665_0383B9_8D00",
-  "source": "COPERNICUS/S1_GRD (Google Earth Engine), sigma0 -- see data/fetch_assam_scene.py",
-  "method": "Otsu (VH, threshold=-20.82 dB) + HAND<=5.0m/slope<=15.0deg masking + JRC permanent-water removal (classical baseline, not the CNN -- see this file's module docstring)",
-  "aoi_bounds": [
-    94.15,
-    27.0,
-    94.3,
-    27.15
+  "source": "COPERNICUS/S1_GRD (Google Earth Engine), sigma0 -- tiled statewide fetch, see data/build_assam_statewide.py",
+  "method": "Otsu (per-tile VH threshold) + HAND<=5.0m/slope<=15.0deg masking + JRC permanent-water removal, 24/35 tiles at 50m/px covered (classical baseline, not the CNN)",
+  "processed_at": "2026-08-27T18:34:02+00:00",
+  "tiles_total": 35,
+  "tiles_covered": 24,
+  "tile_results": [
+    {
+      "aoi_bounds": [
+        89.70506,
+        25.434299999999997,
+        90.35506000000001,
+        26.084299999999995
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200713T120451_20200713T120516_033436_03DFD8_67E8",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200103T120447_20200103T120512_030636_0382B3_47D2",
+      "otsu_threshold_db": -6.91,
+      "flood_pixel_fraction": 0.007414,
+      "flood_polygons": 112
+    },
+    {
+      "aoi_bounds": [
+        89.70506,
+        26.084299999999995,
+        90.35506000000001,
+        26.734299999999994
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200713T120516_20200713T120541_033436_03DFD8_752E",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200103T120512_20200103T120537_030636_0382B3_4838",
+      "otsu_threshold_db": -19.47,
+      "flood_pixel_fraction": 0.226633,
+      "flood_polygons": 1167
+    },
+    {
+      "aoi_bounds": [
+        89.70506,
+        26.734299999999994,
+        90.35506000000001,
+        27.384299999999993
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200713T120516_20200713T120541_033436_03DFD8_752E",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200103T120512_20200103T120537_030636_0382B3_4838",
+      "otsu_threshold_db": -7.24,
+      "flood_pixel_fraction": 0.042009,
+      "flood_polygons": 225
+    },
+    {
+      "aoi_bounds": [
+        90.35506000000001,
+        25.434299999999997,
+        91.00506000000001,
+        26.084299999999995
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200713T120451_20200713T120516_033436_03DFD8_67E8",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200103T120447_20200103T120512_030636_0382B3_47D2",
+      "otsu_threshold_db": -7.02,
+      "flood_pixel_fraction": 0.031177,
+      "flood_polygons": 660
+    },
+    {
+      "aoi_bounds": [
+        90.35506000000001,
+        26.084299999999995,
+        91.00506000000001,
+        26.734299999999994
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200713T120516_20200713T120541_033436_03DFD8_752E",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200103T120512_20200103T120537_030636_0382B3_4838",
+      "otsu_threshold_db": -21.94,
+      "flood_pixel_fraction": 0.201926,
+      "flood_polygons": 1041
+    },
+    {
+      "aoi_bounds": [
+        90.35506000000001,
+        26.734299999999994,
+        91.00506000000001,
+        27.384299999999993
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200713T120516_20200713T120541_033436_03DFD8_752E",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200103T120512_20200103T120537_030636_0382B3_4838",
+      "otsu_threshold_db": -7.4,
+      "flood_pixel_fraction": 0.08893,
+      "flood_polygons": 287
+    },
+    {
+      "aoi_bounds": [
+        91.00506000000001,
+        25.434299999999997,
+        91.65506000000002,
+        26.084299999999995
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200713T120451_20200713T120516_033436_03DFD8_67E8",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200103T120447_20200103T120512_030636_0382B3_47D2",
+      "otsu_threshold_db": -7.54,
+      "flood_pixel_fraction": 0.019868,
+      "flood_polygons": 473
+    },
+    {
+      "aoi_bounds": [
+        91.00506000000001,
+        26.084299999999995,
+        91.65506000000002,
+        26.734299999999994
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200713T120516_20200713T120541_033436_03DFD8_752E",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200103T120512_20200103T120537_030636_0382B3_4838",
+      "otsu_threshold_db": -10.71,
+      "flood_pixel_fraction": 0.13589,
+      "flood_polygons": 32
+    },
+    {
+      "aoi_bounds": [
+        91.00506000000001,
+        26.734299999999994,
+        91.65506000000002,
+        27.384299999999993
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200713T120516_20200713T120541_033436_03DFD8_752E",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200103T120512_20200103T120537_030636_0382B3_4838",
+      "otsu_threshold_db": -7.16,
+      "flood_pixel_fraction": 0.003417,
+      "flood_polygons": 17
+    },
+    {
+      "aoi_bounds": [
+        91.65506000000002,
+        24.1343,
+        92.30506000000003,
+        24.784299999999998
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200720T115635_20200720T115700_033538_03E2E4_8F9A",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200110T115630_20200110T115655_030738_038633_461D",
+      "otsu_threshold_db": -19.01,
+      "flood_pixel_fraction": 0.188713,
+      "flood_polygons": 714
+    },
+    {
+      "aoi_bounds": [
+        91.65506000000002,
+        24.784299999999998,
+        92.30506000000003,
+        25.434299999999997
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200720T115635_20200720T115700_033538_03E2E4_8F9A",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200110T115630_20200110T115655_030738_038633_461D",
+      "otsu_threshold_db": -9.7,
+      "flood_pixel_fraction": 0.472693,
+      "flood_polygons": 493
+    },
+    {
+      "aoi_bounds": [
+        91.65506000000002,
+        25.434299999999997,
+        92.30506000000003,
+        26.084299999999995
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T235525_20200715T235550_033472_03E0EC_6993",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T235520_20200105T235545_030672_0383F2_FBD5",
+      "otsu_threshold_db": -7.19,
+      "flood_pixel_fraction": 0.000894,
+      "flood_polygons": 25
+    },
+    {
+      "aoi_bounds": [
+        91.65506000000002,
+        26.084299999999995,
+        92.30506000000003,
+        26.734299999999994
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T235500_20200715T235525_033472_03E0EC_3E3D",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T235455_20200105T235520_030672_0383F2_EE17",
+      "otsu_threshold_db": -8.76,
+      "flood_pixel_fraction": 0.060613,
+      "flood_polygons": 5
+    },
+    {
+      "aoi_bounds": [
+        91.65506000000002,
+        26.734299999999994,
+        92.30506000000003,
+        27.384299999999993
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T235500_20200715T235525_033472_03E0EC_3E3D",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T235455_20200105T235520_030672_0383F2_EE17",
+      "otsu_threshold_db": -7.28,
+      "flood_pixel_fraction": 0.038022,
+      "flood_polygons": 95
+    },
+    {
+      "aoi_bounds": [
+        92.30506000000003,
+        24.1343,
+        92.95506000000003,
+        24.784299999999998
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200717T233924_20200717T233949_033501_03E1CD_A7E0",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200107T233919_20200107T233944_030701_0384EC_C456",
+      "otsu_threshold_db": -7.5,
+      "flood_pixel_fraction": 0.003318,
+      "flood_polygons": 49
+    },
+    {
+      "aoi_bounds": [
+        92.30506000000003,
+        24.784299999999998,
+        92.95506000000003,
+        25.434299999999997
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T114827_20200715T114852_033465_03E0BA_C98B",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T114823_20200105T114848_030665_0383B9_B5FF",
+      "otsu_threshold_db": -6.94,
+      "flood_pixel_fraction": 0.002618,
+      "flood_polygons": 34
+    },
+    {
+      "aoi_bounds": [
+        92.30506000000003,
+        25.434299999999997,
+        92.95506000000003,
+        26.084299999999995
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T114827_20200715T114852_033465_03E0BA_C98B",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T114823_20200105T114848_030665_0383B9_B5FF",
+      "otsu_threshold_db": -6.98,
+      "flood_pixel_fraction": 0.000578,
+      "flood_polygons": 9
+    },
+    {
+      "aoi_bounds": [
+        92.30506000000003,
+        26.084299999999995,
+        92.95506000000003,
+        26.734299999999994
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T114852_20200715T114917_033465_03E0BA_B218",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T114848_20200105T114913_030665_0383B9_8D00",
+      "otsu_threshold_db": -8.9,
+      "flood_pixel_fraction": 0.32572,
+      "flood_polygons": 140
+    },
+    {
+      "aoi_bounds": [
+        92.30506000000003,
+        26.734299999999994,
+        92.95506000000003,
+        27.384299999999993
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T114852_20200715T114917_033465_03E0BA_B218",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T114848_20200105T114913_030665_0383B9_8D00",
+      "otsu_threshold_db": -7.91,
+      "flood_pixel_fraction": 0.175911,
+      "flood_polygons": 128
+    },
+    {
+      "aoi_bounds": [
+        92.95506000000003,
+        24.1343,
+        93.60506000000004,
+        24.784299999999998
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T114827_20200715T114852_033465_03E0BA_C98B",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T114823_20200105T114848_030665_0383B9_B5FF",
+      "otsu_threshold_db": -7.09,
+      "flood_pixel_fraction": 0.057358,
+      "flood_polygons": 635
+    },
+    {
+      "aoi_bounds": [
+        92.95506000000003,
+        24.784299999999998,
+        93.60506000000004,
+        25.434299999999997
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T114827_20200715T114852_033465_03E0BA_C98B",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T114823_20200105T114848_030665_0383B9_B5FF",
+      "otsu_threshold_db": -11.15,
+      "flood_pixel_fraction": 0.095912,
+      "flood_polygons": 1099
+    },
+    {
+      "aoi_bounds": [
+        92.95506000000003,
+        26.734299999999994,
+        93.60506000000004,
+        27.384299999999993
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T114852_20200715T114917_033465_03E0BA_B218",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T114848_20200105T114913_030665_0383B9_8D00",
+      "otsu_threshold_db": -8.03,
+      "flood_pixel_fraction": 0.281716,
+      "flood_polygons": 259
+    },
+    {
+      "aoi_bounds": [
+        93.60506000000004,
+        25.434299999999997,
+        94.25506000000004,
+        26.084299999999995
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T114827_20200715T114852_033465_03E0BA_C98B",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T114823_20200105T114848_030665_0383B9_B5FF",
+      "otsu_threshold_db": -7.08,
+      "flood_pixel_fraction": 0.014142,
+      "flood_polygons": 156
+    },
+    {
+      "aoi_bounds": [
+        93.60506000000004,
+        26.084299999999995,
+        94.25506000000004,
+        26.734299999999994
+      ],
+      "during_scene_id": "S1A_IW_GRDH_1SDV_20200715T114852_20200715T114917_033465_03E0BA_B218",
+      "dry_scene_id": "S1A_IW_GRDH_1SDV_20200105T114848_20200105T114913_030665_0383B9_8D00",
+      "otsu_threshold_db": -19.0,
+      "flood_pixel_fraction": 0.156458,
+      "flood_polygons": 614
+    }
   ],
-  "processed_at": "2026-08-27T11:01:15+00:00",
-  "water_pixel_fraction": 0.58262,
-  "flood_pixel_fraction": 0.554468,
-  "flood_polygons": 113,
-  "specks_dropped": 770,
+  "tiles_covering_by_district": {
+    "Baksa": 6,
+    "Barpeta": 2,
+    "Bongaigaon": 1,
+    "Cachar": 4,
+    "Chirang": 3,
+    "Darrang": 2,
+    "Dhemaji": 0,
+    "Dhubri": 3,
+    "Dibrugarh": 0,
+    "Dima Hasao": 3,
+    "Goalpara": 5,
+    "Golaghat": 3,
+    "Hailakandi": 2,
+    "Jorhat": 1,
+    "Kamrup": 5,
+    "Kamrup Metropolitan": 4,
+    "Karbi Anglong": 5,
+    "Karimganj": 4,
+    "Kokrajhar": 4,
+    "Lakhimpur": 0,
+    "Marigaon": 4,
+    "Nagaon": 2,
+    "Nalbari": 1,
+    "Sivasagar": 0,
+    "Sonitpur": 4,
+    "Tinsukia": 0,
+    "Udalguri": 4
+  },
+  "flood_polygons": 8469,
   "districts_total": 27,
-  "districts_affected": 2,
-  "total_flooded_hectares": 13465.1,
+  "districts_affected": 18,
+  "total_flooded_hectares": 790725.0,
   "worst_affected": [
     {
-      "name": "Lakhimpur",
-      "flooded_hectares": 9274.8,
-      "flooded_percent": 3.22
+      "name": "Sonitpur",
+      "flooded_hectares": 249280.9,
+      "flooded_percent": 47.96
+    },
+    {
+      "name": "Barpeta",
+      "flooded_hectares": 82524.3,
+      "flooded_percent": 35.71
+    },
+    {
+      "name": "Nagaon",
+      "flooded_hectares": 95619.5,
+      "flooded_percent": 23.96
+    },
+    {
+      "name": "Dhubri",
+      "flooded_hectares": 50584.8,
+      "flooded_percent": 22.05
+    },
+    {
+      "name": "Bongaigaon",
+      "flooded_hectares": 22410.7,
+      "flooded_percent": 21.28
+    }
+  ],
+  "districts": [
+    {
+      "name": "Baksa",
+      "flooded_hectares": 40913.3,
+      "flooded_percent": 17.25,
+      "tiles_covering": 6
+    },
+    {
+      "name": "Barpeta",
+      "flooded_hectares": 83016.5,
+      "flooded_percent": 35.93,
+      "tiles_covering": 2
+    },
+    {
+      "name": "Bongaigaon",
+      "flooded_hectares": 19104.6,
+      "flooded_percent": 18.14,
+      "tiles_covering": 1
+    },
+    {
+      "name": "Cachar",
+      "flooded_hectares": 20506.9,
+      "flooded_percent": 5.42,
+      "tiles_covering": 4
+    },
+    {
+      "name": "Chirang",
+      "flooded_hectares": 27549.5,
+      "flooded_percent": 15.91,
+      "tiles_covering": 3
+    },
+    {
+      "name": "Darrang",
+      "flooded_hectares": 0.0,
+      "flooded_percent": 0.0,
+      "tiles_covering": 2
+    },
+    {
+      "name": "Dhemaji",
+      "flooded_hectares": 0.0,
+      "flooded_percent": 0.0,
+      "tiles_covering": 0
+    },
+    {
+      "name": "Dhubri",
+      "flooded_hectares": 50239.7,
+      "flooded_percent": 21.9,
+      "tiles_covering": 3
+    },
+    {
+      "name": "Dibrugarh",
+      "flooded_hectares": 0.0,
+      "flooded_percent": 0.0,
+      "tiles_covering": 0
+    },
+    {
+      "name": "Dima Hasao",
+      "flooded_hectares": 7296.8,
+      "flooded_percent": 1.49,
+      "tiles_covering": 3
+    },
+    {
+      "name": "Goalpara",
+      "flooded_hectares": 21826.4,
+      "flooded_percent": 10.85,
+      "tiles_covering": 5
+    },
+    {
+      "name": "Golaghat",
+      "flooded_hectares": 49114.3,
+      "flooded_percent": 14.6,
+      "tiles_covering": 3
+    },
+    {
+      "name": "Hailakandi",
+      "flooded_hectares": 0.0,
+      "flooded_percent": 0.0,
+      "tiles_covering": 2
     },
     {
       "name": "Jorhat",
-      "flooded_hectares": 4190.3,
-      "flooded_percent": 1.4
+      "flooded_hectares": 15772.9,
+      "flooded_percent": 5.26,
+      "tiles_covering": 1
+    },
+    {
+      "name": "Kamrup",
+      "flooded_hectares": 11853.6,
+      "flooded_percent": 4.08,
+      "tiles_covering": 5
+    },
+    {
+      "name": "Kamrup Metropolitan",
+      "flooded_hectares": 0.0,
+      "flooded_percent": 0.0,
+      "tiles_covering": 4
+    },
+    {
+      "name": "Karbi Anglong",
+      "flooded_hectares": 5220.1,
+      "flooded_percent": 0.5,
+      "tiles_covering": 5
+    },
+    {
+      "name": "Karimganj",
+      "flooded_hectares": 5837.2,
+      "flooded_percent": 3.12,
+      "tiles_covering": 4
+    },
+    {
+      "name": "Kokrajhar",
+      "flooded_hectares": 54476.0,
+      "flooded_percent": 17.17,
+      "tiles_covering": 4
+    },
+    {
+      "name": "Lakhimpur",
+      "flooded_hectares": 0.0,
+      "flooded_percent": 0.0,
+      "tiles_covering": 0
+    },
+    {
+      "name": "Marigaon",
+      "flooded_hectares": 0.0,
+      "flooded_percent": 0.0,
+      "tiles_covering": 4
+    },
+    {
+      "name": "Nagaon",
+      "flooded_hectares": 102320.6,
+      "flooded_percent": 25.64,
+      "tiles_covering": 2
+    },
+    {
+      "name": "Nalbari",
+      "flooded_hectares": 0.0,
+      "flooded_percent": 0.0,
+      "tiles_covering": 1
+    },
+    {
+      "name": "Sivasagar",
+      "flooded_hectares": 0.0,
+      "flooded_percent": 0.0,
+      "tiles_covering": 0
+    },
+    {
+      "name": "Sonitpur",
+      "flooded_hectares": 266313.0,
+      "flooded_percent": 51.24,
+      "tiles_covering": 4
+    },
+    {
+      "name": "Tinsukia",
+      "flooded_hectares": 0.0,
+      "flooded_percent": 0.0,
+      "tiles_covering": 0
+    },
+    {
+      "name": "Udalguri",
+      "flooded_hectares": 22517.0,
+      "flooded_percent": 11.03,
+      "tiles_covering": 4
     }
   ]
 }
