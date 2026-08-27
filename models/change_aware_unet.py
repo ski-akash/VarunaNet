@@ -125,7 +125,8 @@ class _UpBlock(nn.Module):
 class ChangeAwareUNet(nn.Module):
     def __init__(self, main_in_channels: int = 5, classes: int = 1, pretrained: bool = True):
         super().__init__()
-        resnet = tv_models.resnet34(weights=tv_models.ResNet34_Weights.DEFAULT if pretrained else None)
+        weights = tv_models.ResNet34_Weights.DEFAULT if pretrained else None
+        resnet = tv_models.resnet34(weights=weights)
         resnet.conv1 = _adapt_first_conv(resnet.conv1, main_in_channels)
 
         self.stem = nn.Sequential(resnet.conv1, resnet.bn1, resnet.relu, resnet.maxpool)

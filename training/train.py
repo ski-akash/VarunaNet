@@ -25,8 +25,8 @@ from torch.utils.data import DataLoader, Dataset
 
 from benchmarks.metrics import MetricSummary, compute_chip_metrics, summarize
 from data.contract import LABEL_IGNORE, LABEL_NON_WATER, LABEL_WATER, NUM_CHANNELS
-from models.losses import build_loss
 from models.build_model import build_model
+from models.losses import build_loss
 from training.checkpoint import find_latest_checkpoint, save_checkpoint, seed_everything
 from training.checkpoint import load_checkpoint as _load_checkpoint
 from training.config import TrainConfig

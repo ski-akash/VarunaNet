@@ -85,7 +85,9 @@ def build_sen1floods11_weak_dataset(
     dem_dir = data_root / "DEMWeak"
 
     all_chip_ids = list_weak_chip_ids(image_dir)
-    train_ids, val_ids = split_weak_chip_ids(all_chip_ids, val_fraction=val_fraction, seed=split_seed)
+    train_ids, val_ids = split_weak_chip_ids(
+        all_chip_ids, val_fraction=val_fraction, seed=split_seed
+    )
     chip_ids = train_ids if split == "train" else val_ids
 
     terrain_cache = None

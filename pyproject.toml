@@ -93,6 +93,13 @@ target-version = ["py310"]
 
 [tool.ruff]
 line-length = 100
+# training/kaggle_train.ipynb runs on Kaggle, not in this repo's own test
+# suite (see VarunaNet_Spec.md's environment notes: black already skips
+# .ipynb files the same way, since black[jupyter] isn't installed) --
+# lines like a real "!pip install ..." cell or an f-string printing several
+# metrics at once read better long and un-wrapped than split just to satisfy
+# a line-length rule meant for this project's actual source files.
+extend-exclude = ["training/kaggle_train.ipynb"]
 
 [tool.ruff.lint]
 # Default rule set plus import-sorting, so `ruff check` also catches

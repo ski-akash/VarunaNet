@@ -117,7 +117,9 @@ def _time_session(session, batch: np.ndarray, warmup: int, timed: int) -> float:
     return float(np.median(durations)) / batch.shape[0]
 
 
-def load_real_chips(count: int, data_root: Path = Path("datasets/sen1floods11")) -> np.ndarray | None:
+def load_real_chips(
+    count: int, data_root: Path = Path("datasets/sen1floods11")
+) -> np.ndarray | None:
     """
     A batch of real Sen1Floods11 test chips, or None if the dataset isn't
     present (it is gitignored and large, so this must degrade gracefully).
