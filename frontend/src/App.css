@@ -576,3 +576,30 @@
   color: var(--text);
   font-size: 10.5px;
 }
+
+/* SAR-measured coloring badge -- distinct blue accent, not the news
+   badge's red, since these are two different kinds of claim (a real
+   Sentinel-1 measurement vs. a news report) and shouldn't visually read
+   as the same thing. Stacked directly below the news badge (49px lower:
+   its button + popover-open height), not on top of it. */
+.assam-flood-demo-badge {
+  top: 164px;
+}
+
+.assam-flood-demo-badge .flood-source-info-button {
+  border-color: #2c7fb8;
+  color: #2c7fb8;
+  font-family: var(--sans);
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+.assam-flood-demo-badge .flood-source-info-button:hover {
+  background: #2c7fb8;
+  color: var(--bg);
+}
+
+.assam-flood-demo-badge .flood-source-popover {
+  border-color: #2c7fb8;
+}

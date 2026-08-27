@@ -65,6 +65,11 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "httpx",
+    # Real Assam Sentinel-1 ingestion (spec section 15.4, Track B Step 3):
+    # data/fetch_assam_scene.py and data/build_assam_demo.py pull real
+    # scenes via Google Earth Engine and download them over plain HTTP.
+    "earthengine-api",
+    "requests",
 ]
 
 [project.optional-dependencies]

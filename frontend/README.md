@@ -51,3 +51,18 @@ language query (feature 1) and conversational map control (feature 3, via the
   yet (no `onSelectionChange`-style callback from `ChatPanel` into `MapView`) — the
   trace shows the model proposed a real view change, but the map itself doesn't move.
   That plumbing is the natural next step once this piece is reviewed.
+
+## Real district coloring (Track B Step 3, live)
+
+The choropleth is real now, for the districts a real result actually covers.
+`lib/assamFloodDemo.ts` fetches `/data/assam_flood_demo.json` (written by
+`data/build_assam_demo.py` — a real Sentinel-1 pass over the 2020 Assam monsoon flood,
+Google Earth Engine, scored with this project's own classical baseline); `MapView.tsx`
+turns each district's `flooded_percent` (normalized against the worst-affected district
+in that result, not an absolute 0–100% scale) into a color via `severityColor()` and
+applies it as a `match` expression on the existing `district-fill` layer, layered under
+the existing selected/hover states. `AssamFloodDemoBadge.tsx` (a second, blue-accented
+badge next to the existing red news-report one — deliberately distinct, since a real SAR
+measurement and a news report are different kinds of claim) discloses the real scene id,
+processing time, and — explicitly — that every other district has no data yet, not zero
+flooding, since this is one small AOI (~16km), not full-state coverage.

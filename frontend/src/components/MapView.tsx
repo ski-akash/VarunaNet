@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Map as MapLibreMap, NavigationControl, type StyleSpecification } from 'maplibre-gl'
+import {
+  Map as MapLibreMap,
+  NavigationControl,
+  type ExpressionSpecification,
+  type StyleSpecification,
+} from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import FloodReportBadge from './FloodReportBadge'
+import AssamFloodDemoBadge from './AssamFloodDemoBadge'
 import LayerToggles from './LayerToggles'
 import SeverityLegend from './SeverityLegend'
+import { fetchAssamFloodDemo, type AssamFloodDemo } from '../lib/assamFloodDemo'
+import { severityColor } from '../lib/severityColor'
 
 // Assam's real bounding box (southwest, northeast corners), read straight
 // off the state polygon in assam_state.geojson rather than eyeballed, so
@@ -67,6 +75,7 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null)
   const selectedDistrictRef = useRef<string | number | null>(null)
   const [selectedDistrictName, setSelectedDistrictName] = useState<string | null>(null)
+  const [floodDemo, setFloodDemo] = useState<AssamFloodDemo | null>(null)
 
   useEffect(() => {
     onSelectionChange?.(selectedDistrictName)
@@ -188,6 +197,44 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
         map.setFeatureState({ source: 'assam-districts', id: feature.id }, { selected: true })
         setSelectedDistrictName(String(feature.properties?.name ?? ''))
       })
+
+      // Real severity coloring, for the districts a real result actually
+      // covers -- see lib/assamFloodDemo.ts's own module comment for
+      // exactly what "real" means here (a genuine Sentinel-1 pair over one
+      // small AOI, not full-state coverage). Applied as a setPaintProperty
+      // *after* the initial addLayer above, once the fetch resolves,
+      // rather than blocking the map's first paint on a network request.
+      fetchAssamFloodDemo().then((demo) => {
+        if (!demo || demo.worst_affected.length === 0) return
+        setFloodDemo(demo)
+
+        const maxPercent = Math.max(...demo.worst_affected.map((d) => d.flooded_percent))
+        const severityPairs = demo.worst_affected.flatMap((d) => [
+          d.name,
+          severityColor(maxPercent > 0 ? d.flooded_percent / maxPercent : 0),
+        ])
+
+        // MapLibre's ExpressionSpecification type for 'match' expects a
+        // fixed tuple shape (label, output, ...more pairs, fallback) it
+        // can't infer from a spread built at runtime -- the cast is for
+        // the type checker only, the actual array shape is exactly what
+        // 'match' expects and is exercised directly in the browser.
+        const severityMatchExpression = [
+          'match',
+          ['get', 'name'],
+          ...severityPairs,
+          DISTRICT_FILL_COLOR,
+        ] as unknown as ExpressionSpecification
+        const fillColorExpression: ExpressionSpecification = [
+          'case',
+          ['boolean', ['feature-state', 'selected'], false],
+          DISTRICT_SELECTED_COLOR,
+          ['boolean', ['feature-state', 'hover'], false],
+          DISTRICT_HOVER_COLOR,
+          severityMatchExpression,
+        ]
+        map.setPaintProperty('district-fill', 'fill-color', fillColorExpression)
+      })
     })
 
     mapRef.current = map
@@ -234,6 +281,7 @@ export default function MapView({ onSelectionChange }: MapViewProps) {
       <LayerToggles />
       <SeverityLegend />
       <FloodReportBadge />
+      {floodDemo && <AssamFloodDemoBadge demo={floodDemo} />}
     </div>
   )
 }

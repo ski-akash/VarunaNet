@@ -1,0 +1,32 @@
+{
+  "scene_id": "S1A_IW_GRDH_1SDV_20200715T114852_20200715T114917_033465_03E0BA_B218",
+  "dry_reference_scene_id": "S1A_IW_GRDH_1SDV_20200105T114848_20200105T114913_030665_0383B9_8D00",
+  "source": "COPERNICUS/S1_GRD (Google Earth Engine), sigma0 -- see data/fetch_assam_scene.py",
+  "method": "Otsu (VH, threshold=-20.82 dB) + HAND<=5.0m/slope<=15.0deg masking + JRC permanent-water removal (classical baseline, not the CNN -- see this file's module docstring)",
+  "aoi_bounds": [
+    94.15,
+    27.0,
+    94.3,
+    27.15
+  ],
+  "processed_at": "2026-08-27T11:01:15+00:00",
+  "water_pixel_fraction": 0.58262,
+  "flood_pixel_fraction": 0.554468,
+  "flood_polygons": 113,
+  "specks_dropped": 770,
+  "districts_total": 27,
+  "districts_affected": 2,
+  "total_flooded_hectares": 13465.1,
+  "worst_affected": [
+    {
+      "name": "Lakhimpur",
+      "flooded_hectares": 9274.8,
+      "flooded_percent": 3.22
+    },
+    {
+      "name": "Jorhat",
+      "flooded_hectares": 4190.3,
+      "flooded_percent": 1.4
+    }
+  ]
+}
