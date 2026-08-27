@@ -68,7 +68,10 @@ The choropleth is real now, for the districts a real result actually covers.
 `data/build_assam_demo.py` — a real Sentinel-1 pass over the 2020 Assam monsoon flood,
 Google Earth Engine, scored with this project's own classical baseline); `MapView.tsx`
 turns each district's `flooded_percent` (normalized against the worst-affected district
-in that result, not an absolute 0–100% scale) into a color via `severityColor()` and
+in that result, not an absolute 0–100% scale) into a color via `severityColor()`
+(green→yellow→red, ColorBrewer's "RdYlGn" — changed from an earlier blue-anchored
+version once blue became the map's river color; see `severityColor.ts`'s own comment
+for the accessibility tradeoff that change involved) and
 applies it as a `match` expression on the existing `district-fill` layer, layered under
 the existing selected/hover states. `AssamFloodDemoBadge.tsx` (top-left, clear of
 MapLibre's own top-right zoom/compass control stack — placing it there originally was a

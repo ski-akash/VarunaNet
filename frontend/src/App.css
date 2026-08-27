@@ -527,6 +527,10 @@
 .flood-source-info-button {
   width: 24px;
   height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border-radius: 50%;
   border: 1.5px solid #e2636b;
   background: var(--bg);
@@ -537,6 +541,7 @@
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
+  overflow: hidden;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
@@ -550,6 +555,7 @@
   top: 32px;
   right: 0;
   width: max(260px, min(90vw, 340px));
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -560,6 +566,10 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   font-family: var(--sans);
   font-size: 11px;
+  /* A scene id (e.g. "S1A_IW_GRDH_1SDV_20200715T114852_...") is one long
+     unbroken token with no spaces -- without this it overflows straight
+     past the box's own right edge instead of wrapping. */
+  overflow-wrap: anywhere;
   line-height: 1.4;
   color: var(--text-h);
 }
@@ -596,12 +606,17 @@
 }
 
 .assam-flood-demo-badge .flood-source-info-button {
+  /* Wider than the base 24px circle -- "SAR" at any legible size doesn't
+     fit inside that diameter without touching or crossing the border,
+     which is what was actually happening (not just a centering issue). */
+  width: 30px;
   border-color: #2c7fb8;
   color: #2c7fb8;
   font-family: var(--sans);
   font-style: normal;
-  font-size: 9px;
-  letter-spacing: 0.02em;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .assam-flood-demo-badge .flood-source-info-button:hover {

@@ -1,30 +1,31 @@
 // Flood-severity color scale (spec section 7: "sequential color scale,"
 // "never encode severity by hue alone" -- colorblind safety in
-// particular). Blue (safest) -> pale yellow (mid) -> dark red (most
-// dangerous), not the red-to-green scale that was the initial instinct:
-// red and green collapse to nearly the same color for red-green color
-// blindness (deuteranopia/protanopia, ~1 in 12 men), which would make
-// the two most important ends of the scale indistinguishable for a real
-// share of users. Blue-to-red keeps both ends clearly separated for
-// every common type of color vision, including full grayscale -- this
-// exact 8-stop family (a ColorBrewer-style "YlOrRd" scale with a blue
-// anchor added at the safe end) is a standard, well-tested choice for
-// exactly this kind of severity map.
+// particular). Green (safest) -> yellow (mid) -> dark red (most
+// dangerous) -- ColorBrewer's standard "RdYlGn" diverging palette, 8
+// stops, reversed so green anchors the safe end.
 //
-// Deliberately not wired to any real state/district yet: there is no
-// trained model output to color by (spec section 6.1's grounding
-// principle applies here as much as it does to the AI layer -- don't
-// visually imply severity data that isn't real). This is ready
-// infrastructure, not a currently-active choropleth.
+// This project's first version deliberately used blue instead of green at
+// the safe end, specifically because pure red-green scales collapse to
+// nearly the same color under red-green color blindness (deuteranopia/
+// protanopia, ~1 in 12 men). Reverted to green here at the user's
+// explicit request, once blue became the map's river color and a
+// blue-anchored severity scale started reading as "this district is a
+// river" rather than "this district is safe". The yellow midpoint is kept
+// (not a flat two-color green-to-red) specifically to preserve some of
+// that original accessibility intent -- a three-hue progression with a
+// real luminosity change gives more to go on than a pure two-color jump
+// would, even though it's not as robust as the blue-anchored version was.
+// The legend's own "Safe"/"Danger" text labels are the actual guarantee
+// against hue-alone encoding, per spec section 7, regardless of palette.
 const SEVERITY_COLOR_STOPS: readonly string[] = [
-  '#2c7fb8', // safest
-  '#41b6c4',
-  '#a1dab4',
-  '#ffffb2', // midpoint
-  '#fecc5c',
-  '#fd8d3c',
-  '#e31a1c',
-  '#7f0000', // most dangerous
+  '#006837', // safest
+  '#1a9850',
+  '#66bd63',
+  '#a6d96a',
+  '#ffffbf', // midpoint
+  '#fdae61',
+  '#f46d43',
+  '#a50026', // most dangerous
 ]
 
 function hexToRgb(hex: string): [number, number, number] {
