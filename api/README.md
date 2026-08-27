@@ -69,10 +69,9 @@ Needs a local Redis for both running the gateway and running its Redis-backed te
 `redis://localhost:6379/15` by default (a separate DB index, not the default one) so
 running the tests doesn't collide with a real dev instance's data.
 
-**Not built yet:** auth (API key), rate limiting, the tile cache and the LLM semantic
-cache (Redis jobs 3 and 4 — the latter needs Phase 6's agent loop to exist first), the
-LLM tool-calling agent loop and tool registry, SSE streaming, and the rest of the
-Phase 6 REST surface (`query_flood_stats`, `get_worst_affected`, `set_map_view`, etc.).
+**Not built yet:** the tile cache and the LLM semantic cache (Redis jobs 3 and 4 — the
+latter needs Phase 6's agent loop to exist first), the LLM agent loop itself, SSE
+streaming.
 
 ## PostGIS: the system of record
 
@@ -108,6 +107,38 @@ Needs a local Postgres+PostGIS for both running the gateway and its DB-backed te
 `brew install postgresql@18 postgis`, then `createdb varunanet_test && psql -d
 varunanet_test -f src/db/schema.sql` (tests default to
 `postgres://localhost:5432/varunanet_test`, override with `TEST_DATABASE_URL`).
+
+## Tool registry (Phase 6 groundwork)
+
+`src/tools/registry.ts` (`ToolRegistry`) — spec section 6's shared tool registry, built
+ahead of the actual LLM agent loop since the tools themselves are provider-agnostic:
+plain typed functions against real data, independent of which model ends up calling
+them (currently blocked on an LLM provider key this environment doesn't have).
+
+Three of spec section 6.2's seven tools are implemented for real:
+- `getSceneMetadata` — the exact stored payload for a named scene (or the most recently
+  processed one), unmodified.
+- `getWorstAffected` — ranked districts for one named scene (or the most recent), scoped
+  by `scene_id` in the query itself so it can never conflate different passes once more
+  than one scene has been processed.
+- `setMapView` — a pure function, not a query: validates and normalizes a proposed view
+  state (region/bounds/zoom/layers/timeIndex), rejecting an unknown layer name outright.
+  Per spec section 6.5, this is only ever a *proposal* — the frontend stays authoritative
+  and decides whether to apply it.
+
+The other four (`query_flood_stats`, `compare_time_periods`, `get_model_confidence`,
+`generate_report`) are deliberately **not** in the registry — each needs something real
+that doesn't exist yet (multiple scenes over time for the same region, a real uncertainty
+estimate, the PDF report pipeline), and building them against fabricated data would
+violate the exact grounding rule this registry exists to enforce. See `NOT_YET_BUILT` in
+the source for the reasoning per tool.
+
+7 new tests (26 total in `api/`). **Found a real test-isolation bug while adding
+these**: Node's test runner runs test *files* concurrently by default, and every
+DB-backed test in this package starts with `TRUNCATE scenes, district_impacts` — two
+files running at once could truncate out from under each other mid-test. Fixed by
+running the whole suite with `--test-concurrency=1` (see `package.json`'s `test`
+script); caught by a real, reproducible failing assertion, not a flaky-looking one.
 
 ## Auth and rate limiting
 

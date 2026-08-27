@@ -92,14 +92,31 @@ export class SceneRepository {
     return rows.length === 0 ? null : rows[0].raw_result;
   }
 
-  async worstAffected(limit = 10): Promise<WorstAffectedEntry[]> {
+  // Scoped to one scene when sceneId is given -- ranking across every
+  // stored scene's district rows at once (the unscoped default) conflates
+  // different passes/dates the moment more than one scene has ever been
+  // processed, which the tool registry's get_worst_affected must not do
+  // (spec section 6.1: every figure has to be traceable to one query).
+  async worstAffected(limit = 10, sceneId?: string): Promise<WorstAffectedEntry[]> {
     const { rows } = await this.pool.query<WorstAffectedEntry>(
       `SELECT district_name AS name, flooded_hectares, flooded_percent
        FROM district_impacts
+       WHERE $2::text IS NULL OR scene_id = $2
        ORDER BY flooded_percent DESC
        LIMIT $1`,
-      [limit],
+      [limit, sceneId ?? null],
     );
     return rows;
+  }
+
+  // The most recently processed scene id -- used as the tool registry's
+  // default when a caller doesn't name one, since right now (before real
+  // multi-pass Assam ingestion exists) there is rarely more than one
+  // meaningfully current scene to pick from.
+  async mostRecentSceneId(): Promise<string | null> {
+    const { rows } = await this.pool.query<{ scene_id: string }>(
+      "SELECT scene_id FROM scenes ORDER BY processed_at DESC LIMIT 1",
+    );
+    return rows.length === 0 ? null : rows[0].scene_id;
   }
 }
